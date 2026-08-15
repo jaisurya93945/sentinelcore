@@ -64,3 +64,10 @@ class ScanResult(BaseModel):
         default=None,
         description="Set by the policy engine (Phase 3, not yet implemented)",
     )
+
+
+class ScanRequest(BaseModel):
+    """Request body for POST /api/v1/scan."""
+
+    text: str
+    context: dict[str, Any] | None = None
