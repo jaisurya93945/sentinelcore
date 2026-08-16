@@ -1,0 +1,29 @@
+# Default SentinelCore policy.
+# Two layers, most-severe-decision-wins -- see policy_engine.py.
+version: 1
+
+# Per-finding-type rules: any matching finding forces this decision,
+# regardless of the computed risk score.
+#
+# "sanitize" is used where the fix is mechanical and well-defined (strip
+# the offending characters). "block" is used where there's no safe partial
+# fix -- an actual instruction override or jailbreak attempt can't be
+# "cleaned" into something safe.
+rules:
+  instruction_override: block
+  role_manipulation: block
+  system_prompt_extraction: warn
+  mixed_script_homoglyph: warn
+  encoded_payload_suspected: warn
+  entity_encoding_obfuscation: warn
+  zero_width_characters: sanitize
+  bidi_control_characters: sanitize
+  unusual_whitespace: sanitize
+  control_characters: sanitize
+
+# Fallback thresholds (risk score 0-100) for any finding type not covered
+# by an explicit rule above.
+thresholds:
+  block: 70
+  sanitize: 50
+  warn: 25

@@ -14,7 +14,7 @@ Modern AI apps expose models to untrusted user input, external documents, tools,
 
 We never fabricate accuracy, precision, recall, F1, latency, or detection-rate numbers. Every claim in this repo reflects what is actually implemented and tested — not the long-term vision. Planned and experimental capabilities are always labeled as such.
 
-## Current Status — v0.1.0-dev (Day 1-7)
+## Current Status — v0.1.0-dev (Day 1-9)
 
 | Component | Status |
 |---|---|
@@ -24,13 +24,13 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Detector plugin interface + registry | Done |
 | Prompt injection detector (rules/heuristics) | Done |
 | Obfuscation detector (zero-width/bidi/homoglyph/encoding) | Done |
-| `/api/v1/scan` endpoint | Done (preview — raw findings only, no risk/policy scoring) |
-| Risk engine | Not started |
-| Policy engine | Not started |
+| Risk engine (deterministic severity-weighted scoring) | Done |
+| Policy engine (per-type rules + score thresholds, configurable YAML) | Done |
+| `/api/v1/scan` endpoint | Done — full pipeline: detect → score → decide |
 | Evaluation / benchmarks | Not started |
 | Attack Replay Lab | Not started |
 
-**Two real detection capabilities exist so far: prompt injection and obfuscation** — tested together in `tests/integration/test_layered_detection.py`, which shows why a layered gateway catches more than either detector alone. See `docs/threat-model/README.md` for exactly what each catches and its documented limitations.
+**Full detection pipeline is live end to end:** input → detectors → risk score → policy decision. `/api/v1/scan` no longer returns null `risk_score`/`decision`. See `docs/threat-model/README.md` for exactly how each is computed, and what's still missing (no benchmarked accuracy numbers yet, no actual sanitization execution yet, no RAG/agent/output coverage yet).
 
 ## Quickstart
 

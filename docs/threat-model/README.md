@@ -53,4 +53,29 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 ## Not yet implemented
 
-See the Current Status table in `README.md` for the full list (RAG poisoning, agent/tool misuse, output leakage, risk engine, policy engine).
+See the Current Status table in `README.md` for the full list (RAG poisoning, agent/tool misuse, output leakage, actual sanitization execution, evaluation/benchmarking).
+
+## Implemented: Risk Engine
+
+**Module:** `app/services/risk_engine.py`
+**Method:** Deterministic severity-weighted scoring -- no ML, no statistical model. Every score is fully explainable: the highest-severity finding sets the base (LOW=10, MEDIUM=30, HIGH=60, CRITICAL=90), each additional finding adds 15% of its own weight on top, capped at 100.
+
+### Known limitations
+
+- **Confidence is not used in scoring.** All v0.1 detectors are deterministic rule matches, not calibrated ML, so every finding is treated as certain. Confidence-weighted scoring only becomes meaningful once a calibrated detector actually exists.
+- **The 15% "additional finding" factor is a chosen constant, not a benchmarked value.** It hasn't been tuned against a labeled dataset -- that's Phase 4 work.
+- **No historical/session signals yet** -- each scan is scored independently of any prior scans from the same user or session.
+
+## Implemented: Policy Engine
+
+**Module:** `app/services/policy_engine.py`, configured by `app/services/policy.yaml`
+**Method:** Two layers, most-severe-decision-wins:
+1. **Per-finding-type rules** -- e.g. `instruction_override: block` forces that decision whenever the type appears, regardless of score.
+2. **Risk-score thresholds** -- fallback for any finding type without an explicit rule (`block: 70`, `sanitize: 50`, `warn: 25` by default).
+
+### Design notes
+
+- `sanitize` is used for findings that are mechanically fixable (zero-width characters, bidi overrides, unusual whitespace, control characters -- stripping them is well-defined). `block` is used where there's no safe partial fix, like an actual instruction override.
+- **SANITIZE is a decision the policy engine can return -- nothing in v0.1 actually performs the strip-and-rescan yet.** Building that transform, and re-running detection on the cleaned text, is tracked as future work, not hidden as already done.
+- Policy is fully external and editable (`app/services/policy.yaml`) -- no code change needed to adjust which finding types block/warn/sanitize, or to change thresholds.
+- Policy is reloaded from disk on every request in v0.1. Fine for a baseline; caching it at startup is a natural optimization once latency matters.
