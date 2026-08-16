@@ -14,7 +14,7 @@ Modern AI apps expose models to untrusted user input, external documents, tools,
 
 We never fabricate accuracy, precision, recall, F1, latency, or detection-rate numbers. Every claim in this repo reflects what is actually implemented and tested — not the long-term vision. Planned and experimental capabilities are always labeled as such.
 
-## Current Status — v0.1.0-dev (Day 1-9)
+## Current Status — v0.1.0-dev (Day 1-14)
 
 | Component | Status |
 |---|---|
@@ -27,10 +27,10 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Risk engine (deterministic severity-weighted scoring) | Done |
 | Policy engine (per-type rules + score thresholds, configurable YAML) | Done |
 | `/api/v1/scan` endpoint | Done — full pipeline: detect → score → decide |
-| Evaluation / benchmarks | Not started |
+| Evaluation against real labeled data (744 examples) | Done — 95.4% precision, 11.9% recall, 0.5% FPR |
 | Attack Replay Lab | Not started |
 
-**Full detection pipeline is live end to end:** input → detectors → risk score → policy decision. `/api/v1/scan` no longer returns null `risk_score`/`decision`. See `docs/threat-model/README.md` for exactly how each is computed, and what's still missing (no benchmarked accuracy numbers yet, no actual sanitization execution yet, no RAG/agent/output coverage yet).
+**Real, measured numbers now exist — and they're not flattering, on purpose.** Precision is high (95.4%) and false positives are rare (0.5%), but recall is low (11.9%): a 16-pattern regex baseline only catches a narrow slice of real attack phrasing. That gap, and exactly where it comes from, is documented in full in `docs/research/README.md` — including a confirmed, root-caused false-positive mechanism, not just a disclaimer.
 
 ## Quickstart
 
@@ -69,6 +69,10 @@ Full design docs land in `docs/architecture/` as each phase ships.
 ## Adding a detector
 
 Detectors are self-contained plugins — no core files need to change. See `CONTRIBUTING.md`.
+
+## Evaluation
+
+Real precision/recall/F1 against 744 labeled examples, fully reproducible — see `docs/research/README.md`.
 
 ## Roadmap
 

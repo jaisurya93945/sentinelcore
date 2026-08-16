@@ -49,6 +49,7 @@ This is the actual argument for a layered gateway instead of one clever detector
 - **Mixed-script detection uses Unicode character *names*, not real Unicode script properties** -- a lightweight heuristic (Python's stdlib `unicodedata` doesn't expose script directly), so it only recognizes LATIN/CYRILLIC/GREEK confusables today. A full Unicode script-property lookup is a candidate future dependency.
 - **Encoded-payload detection is a length heuristic, not a decoder.** It flags long base64-*looking* runs without decoding or inspecting them, and will false-positive on legitimate long tokens (hashes, API keys, session IDs).
 - **Pure non-Latin-script text is intentionally not flagged** -- only script-*mixing within a single word* is treated as suspicious, so the detector doesn't penalize non-English input.
+- **Confirmed by real evaluation, not just theory:** two false positives in `docs/research/README.md` trace to incidental zero-width spaces embedded in ordinary text (a likely translation/copy-paste artifact in the source data) -- the detector correctly reports the character is present, but presence alone isn't proof of adversarial intent. Distinguishing the two would need more context than a single detector sees.
 - **Not yet benchmarked against a real dataset**, same as prompt_injection -- no accuracy claims until Phase 4.
 
 ## Not yet implemented
