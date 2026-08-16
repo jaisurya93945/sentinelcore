@@ -14,7 +14,7 @@ Modern AI apps expose models to untrusted user input, external documents, tools,
 
 We never fabricate accuracy, precision, recall, F1, latency, or detection-rate numbers. Every claim in this repo reflects what is actually implemented and tested — not the long-term vision. Planned and experimental capabilities are always labeled as such.
 
-## Current Status — v0.1.0-dev (Day 1-5)
+## Current Status — v0.1.0-dev (Day 1-7)
 
 | Component | Status |
 |---|---|
@@ -23,14 +23,14 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Security finding schema (Pydantic) | Done |
 | Detector plugin interface + registry | Done |
 | Prompt injection detector (rules/heuristics) | Done |
+| Obfuscation detector (zero-width/bidi/homoglyph/encoding) | Done |
 | `/api/v1/scan` endpoint | Done (preview — raw findings only, no risk/policy scoring) |
-| Obfuscation detector | Not started |
 | Risk engine | Not started |
 | Policy engine | Not started |
 | Evaluation / benchmarks | Not started |
 | Attack Replay Lab | Not started |
 
-**One real detection capability exists so far: prompt injection.** See `docs/threat-model/README.md` for exactly what it catches and its documented limitations — nothing here is dressed up to look further along than it is.
+**Two real detection capabilities exist so far: prompt injection and obfuscation** — tested together in `tests/integration/test_layered_detection.py`, which shows why a layered gateway catches more than either detector alone. See `docs/threat-model/README.md` for exactly what each catches and its documented limitations.
 
 ## Quickstart
 
