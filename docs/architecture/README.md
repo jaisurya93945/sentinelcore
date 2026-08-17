@@ -7,10 +7,11 @@ What's actually built and running today (v0.2) — not the long-term vision. For
 ```mermaid
 flowchart TD
     Client[Client] -->|POST /api/v1/scan| API["Scan Endpoint<br/>app/api/v1/scan.py"]
-    API --> Registry["Detector Registry<br/>app/detectors/registry.py"]
+    API -->|text| Registry["Detector Registry<br/>app/detectors/registry.py"]
+    API -->|"retrieved_documents[i]<br/>(RAG context, optional)"| Registry
     Registry --> PI["PromptInjectionDetector<br/>16 rules, 3 categories"]
     Registry --> OB["ObfuscationDetector<br/>8 checks"]
-    PI --> Findings[Findings]
+    PI --> Findings["Findings<br/>origin: input or context:i"]
     OB --> Findings
     Findings --> Risk["Risk Engine<br/>severity-weighted score, 0-100"]
     Findings --> Policy[Policy Engine]
@@ -31,7 +32,7 @@ flowchart TD
 | **Obfuscation detector** | `app/detectors/obfuscation/` | Character/encoding-level checks. Looks at how the text is *encoded*, independent of meaning — a deliberately different mechanism than prompt_injection. See `docs/threat-model/README.md` for why both are needed together. |
 | **Risk engine** | `app/services/risk_engine.py` | Combines findings into one 0-100 score. Deterministic, no ML. |
 | **Policy engine** | `app/services/policy_engine.py`, `policy.yaml` | Maps findings + score to a final decision. Two layers (per-type rules, then score thresholds), most-severe-wins. Fully configurable without code changes. |
-| **Scan endpoint** | `app/api/v1/scan.py` | Wires the above into one request: detect → score → decide. |
+| **Scan endpoint** | `app/api/v1/scan.py` | Wires the above into one request: detect → score → decide. Also scans optional `retrieved_documents` (RAG context) through the same detectors, tagging each finding's `origin` so indirect injection (a retrieved document, not the user) is distinguishable from direct input. |
 
 ## Why detectors are separate from risk/policy
 

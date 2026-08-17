@@ -43,6 +43,10 @@ class Finding(BaseModel):
             "Never fabricated -- see project Authenticity Policy."
         ),
     )
+    origin: str = Field(
+        default="input",
+        description="Where this finding was found: 'input' for the main text, or 'context:<index>' for the Nth retrieved/RAG document",
+    )
     evidence: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
@@ -71,3 +75,11 @@ class ScanRequest(BaseModel):
 
     text: str
     context: dict[str, Any] | None = None
+    retrieved_documents: list[str] | None = Field(
+        default=None,
+        description=(
+            "RAG-retrieved documents to also scan for indirect prompt injection, "
+            "in addition to the main input text. Each finding from these is "
+            "tagged origin='context:<index>' to distinguish it from the user's own words."
+        ),
+    )
