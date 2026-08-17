@@ -32,13 +32,15 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Policy engine (per-type rules + score thresholds, configurable YAML) | Done |
 | `/api/v1/scan` endpoint | Done — full pipeline: detect → score → decide |
 | RAG context scanning (indirect prompt injection, origin-tagged) | Done |
+| Reverse proxy gateway (`/v1/chat/completions`, OpenAI-path-compatible) | Done — non-streaming only |
 | Evaluation against real labeled data (744 examples) | Done — 96.8% precision, 17.4% recall, 0.5% FPR (v0.2) |
 | Attack Replay Lab (version snapshot + diff) | Done — v0.1→v0.2: +5.5pp recall, 0 regressions |
+| Streaming proxy support | Not started |
 | Agent/tool-call inspection | Not started |
 | Output scanning | Not started |
 | Dashboard | Not started |
 
-**Indirect prompt injection is now caught, not just direct.** Retrieved/RAG documents get scanned through the same detectors as user input, with every finding tagged `origin: input` or `origin: context:<i>` — so "the user asked for this" and "something retrieved said this" are never conflated. No new detection algorithm was needed for this: see `docs/threat-model/README.md` for why reusing the existing detectors was the right call, and its documented limits (origin doesn't affect scoring yet, no conflicting-instruction detection, no source trust tracking).
+**This is now a gateway you can sit real traffic behind, not just an API you remember to call.** Point an OpenAI-SDK-compatible client's `base_url` at SentinelCore and requests get scanned before they reach your actual LLM provider — a BLOCK decision never reaches upstream, proven with a mocked-upstream test asserting zero calls, not just a status code check. Configure the real upstream via `SENTINELCORE_UPSTREAM_BASE_URL`. Full limitations (streaming isn't supported yet, malformed bodies fail open, not tested against a real provider) in `docs/threat-model/README.md`.
 
 ## Quickstart
 
@@ -46,6 +48,15 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 pip install -r requirements.txt
 uvicorn app.main:app --reload
 ```
+
+To run it as a reverse proxy in front of a real provider, set the upstream (defaults to `https://api.openai.com`):
+
+```bash
+export SENTINELCORE_UPSTREAM_BASE_URL="https://api.openai.com"
+uvicorn app.main:app --reload
+```
+
+Then point an existing OpenAI-SDK client's `base_url` at `http://localhost:8000` instead of the real provider — your own API key still goes in the `Authorization` header exactly as before, SentinelCore just passes it through.
 
 Visit `http://localhost:8000/api/v1/health`, or try the scan endpoint:
 

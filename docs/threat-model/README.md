@@ -55,7 +55,30 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 ## Not yet implemented
 
-See the Current Status table in `README.md` for the full list (agent/tool misuse, output leakage, actual sanitization execution, conflicting-instruction detection, source trust/provenance tracking).
+See the Current Status table in `README.md` for the full list (agent/tool misuse, output leakage, actual sanitization execution, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support).
+
+## Implemented: Reverse Proxy Gateway
+
+**Module:** `app/api/v1/proxy.py`, `app/services/proxy.py`
+**Endpoint:** `POST /v1/chat/completions` -- deliberately matching OpenAI's own path, not `/api/v1/...`, so an existing OpenAI-SDK-compatible client becomes protected by changing only its `base_url`.
+
+This is what makes SentinelCore a gateway you sit traffic *behind*, not just an API you remember to call. A client sends its normal chat completion request to SentinelCore instead of directly to its LLM provider. SentinelCore scans it through the exact same detectors, risk engine, and policy engine as `/api/v1/scan` -- no separate detection logic exists for the proxy path. If the decision is BLOCK, the request is rejected immediately and **the upstream model is never called** -- proven in `tests/unit/test_proxy.py` by asserting the mocked upstream received zero requests, not just checking the response code. Otherwise, the original request is forwarded byte-for-byte to the configured upstream, and the response is passed back with two added headers: `X-SentinelCore-Decision` and `X-SentinelCore-Risk-Score`.
+
+The client's `Authorization` header (their real API key) is forwarded through untouched. SentinelCore never stores or inspects it -- this is a deliberate security property: a gateway that had to hold your upstream credentials would be a much bigger thing to trust than one that just passes them through.
+
+### What gets scanned in a chat completion request
+
+- The **latest `user`-role message** is scanned as `origin: input`.
+- Any **`tool`-role messages** (how retrieved/RAG content typically enters a real conversation) are scanned as `origin: context:<index>`, reusing the exact mechanism built for `/api/v1/scan`'s `retrieved_documents`.
+- Message `content` can be a plain string or a list of content parts (multimodal); text parts are extracted and scanned, non-text parts (images, audio) are not inspected in v0.1.
+
+### Known limitations
+
+- **Streaming (`stream: true`) is explicitly rejected**, not silently mishandled -- returns a clear `501` telling the caller to set `stream: false` or use `/api/v1/scan` directly. Proxying Server-Sent Events correctly (buffering partial tokens, handling mid-stream errors) is real work that hasn't been done -- pretending to support it and breaking silently would be worse than refusing outright.
+- **Malformed or unrecognized request bodies are forwarded unscanned, not blocked.** If there's no valid `messages` list, SentinelCore can't extract anything to check, and the v0.1 design choice is to fail open (forward through) rather than fail closed (reject everything unfamiliar) -- documented as a real tradeoff, not hidden. A production gateway would likely need this to be configurable.
+- **Only `/v1/chat/completions` is proxied.** Other OpenAI-shaped endpoints (`/v1/embeddings`, `/v1/models`, etc.) aren't implemented -- there's no generic passthrough yet, only this one specific, security-relevant path.
+- **SANITIZE doesn't transform anything here either** -- same gap as `/api/v1/scan`. A `sanitize` decision currently forwards the request unmodified.
+- **Not tested against a real LLM provider.** Every proxy test mocks the upstream with `respx` -- this sandbox has no network access to `api.openai.com` and no API key to use even if it did. The forwarding logic is correct and tested; end-to-end behavior against a real provider hasn't been verified and shouldn't be assumed identical until it has.
 
 ## Implemented: RAG Context Scanning (Indirect Prompt Injection)
 

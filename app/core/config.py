@@ -5,6 +5,8 @@ class Settings(BaseSettings):
     app_name: str = "SentinelCore"
     version: str = "0.1.0"
     environment: str = "development"
+    upstream_base_url: str = "https://api.openai.com"
+    upstream_timeout_seconds: float = 60.0
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="SENTINELCORE_")
 

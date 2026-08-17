@@ -2,6 +2,17 @@
 
 Every entry here corresponds to a real, tested commit — see `git log` for the full history, and `docs/research/README.md` for how the measured numbers were produced.
 
+## Unreleased
+
+### Added
+- RAG context scanning — `retrieved_documents` on `/api/v1/scan`, findings tagged by `origin` (`input` vs `context:<i>`) to distinguish direct from indirect prompt injection. No new detector needed; reuses the existing two.
+- Reverse proxy gateway — `POST /v1/chat/completions`, OpenAI-path-compatible. Point an existing client's `base_url` at SentinelCore; BLOCK decisions never reach the upstream provider (verified with a mocked-upstream test asserting zero calls, not just a status code). Configurable upstream via `SENTINELCORE_UPSTREAM_BASE_URL`.
+
+### Known gaps (documented, not hidden)
+- Streaming (`stream: true`) is explicitly rejected with a clear error, not silently mishandled
+- Not yet tested against a real LLM provider — the dev sandbox has no network access to verify that end-to-end
+- SANITIZE still doesn't transform anything anywhere in the codebase — it's a valid decision, nothing executes it yet
+
 ## v0.2 (detector patterns) — part of v0.1.0-dev
 
 ### Added

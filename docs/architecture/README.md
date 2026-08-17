@@ -6,20 +6,26 @@ What's actually built and running today (v0.2) — not the long-term vision. For
 
 ```mermaid
 flowchart TD
-    Client[Client] -->|POST /api/v1/scan| API["Scan Endpoint<br/>app/api/v1/scan.py"]
-    API -->|text| Registry["Detector Registry<br/>app/detectors/registry.py"]
-    API -->|"retrieved_documents[i]<br/>(RAG context, optional)"| Registry
-    Registry --> PI["PromptInjectionDetector<br/>16 rules, 3 categories"]
-    Registry --> OB["ObfuscationDetector<br/>8 checks"]
+    ScanClient["Client calling<br/>/api/v1/scan"] -->|text + retrieved_documents| ScanAPI["Scan Endpoint<br/>app/api/v1/scan.py"]
+    ProxyClient["Client with base_url<br/>pointed at SentinelCore"] -->|POST /v1/chat/completions| ProxyAPI["Proxy Endpoint<br/>app/api/v1/proxy.py"]
+    ScanAPI --> Registry["Detector Registry<br/>app/detectors/registry.py"]
+    ProxyAPI --> Registry
+    Registry --> PI["PromptInjectionDetector"]
+    Registry --> OB["ObfuscationDetector"]
     PI --> Findings["Findings<br/>origin: input or context:i"]
     OB --> Findings
-    Findings --> Risk["Risk Engine<br/>severity-weighted score, 0-100"]
+    Findings --> Risk["Risk Engine"]
     Findings --> Policy[Policy Engine]
     Risk -->|risk_score| Policy
     Policy -->|reads| YAML[policy.yaml]
     Policy --> Decision["Decision:<br/>ALLOW / WARN / SANITIZE / BLOCK"]
-    Decision --> Response[ScanResult JSON]
-    Response --> Client
+    Decision --> ScanResponse[ScanResult JSON]
+    ScanResponse --> ScanClient
+    Decision -->|BLOCK| BlockResp["Blocked response<br/>(upstream never called)"]
+    Decision -->|"ALLOW / WARN / SANITIZE"| Forward["Forward request<br/>app/services/proxy.py"]
+    Forward --> Upstream["Real LLM Provider<br/>(configurable base URL)"]
+    Upstream --> ProxyClient
+    BlockResp --> ProxyClient
 ```
 
 ## Components
@@ -33,6 +39,7 @@ flowchart TD
 | **Risk engine** | `app/services/risk_engine.py` | Combines findings into one 0-100 score. Deterministic, no ML. |
 | **Policy engine** | `app/services/policy_engine.py`, `policy.yaml` | Maps findings + score to a final decision. Two layers (per-type rules, then score thresholds), most-severe-wins. Fully configurable without code changes. |
 | **Scan endpoint** | `app/api/v1/scan.py` | Wires the above into one request: detect → score → decide. Also scans optional `retrieved_documents` (RAG context) through the same detectors, tagging each finding's `origin` so indirect injection (a retrieved document, not the user) is distinguishable from direct input. |
+| **Reverse proxy** | `app/api/v1/proxy.py`, `app/services/proxy.py` | `POST /v1/chat/completions` -- an OpenAI-path-compatible drop-in gateway. Scans through the identical detector → risk → policy pipeline as the scan endpoint (no separate detection logic); BLOCK decisions never reach the upstream provider, everything else forwards through with the client's credentials passed through untouched. |
 
 ## Why detectors are separate from risk/policy
 
