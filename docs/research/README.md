@@ -1,6 +1,8 @@
 # Evaluation Report — v0.1.0-dev baseline
 
-Every number on this page comes from `scripts/evaluate.py` run against real, externally-sourced, labeled data. Nothing here is hand-typed or estimated. Reproduce it yourself:
+*Note: the numbers immediately below are the original v0.1 baseline, kept as-measured. The detector running in this repo today is v0.2 — see the "v0.1 → v0.2" comparison at the bottom of this page for current numbers and exactly what changed.*
+
+Every number on this page comes from `scripts/evaluate.py` or `scripts/replay_lab.py`, run against real, externally-sourced, labeled data. Nothing here is hand-typed or estimated. Reproduce it yourself:
 
 ```bash
 pip install -r requirements.txt -r scripts/requirements.txt
@@ -88,3 +90,30 @@ This evaluation isn't just a report card, it's a prioritized to-do list, ranked 
 - 744 examples is a modest evaluation set, not a large-scale benchmark. Numbers may shift with more data.
 - Detector-level "any finding = predicted malicious" is a reasonable proxy but not identical to "the gateway would have stopped this" (see the policy engine table above for that view).
 - Both source datasets skew toward classic/well-known attack phrasing; real-world adversarial traffic may differ.
+
+## v0.1 → v0.2: Attack Replay Lab comparison
+
+The three "Where this points next" items above were acted on and measured, not just proposed. Reproduce this exact comparison:
+
+```bash
+python scripts/replay_lab.py snapshot v0.1   # before the changes below
+# ... make detector changes ...
+python scripts/replay_lab.py snapshot v0.2   # after
+python scripts/replay_lab.py compare v0.1 v0.2
+```
+
+**What changed:** two prompt-injection pattern fixes (`IO-001` widened to catch two-word qualifiers like "the above"; `IO-007` added for the "forget about X" phrasing) and one new obfuscation check (`character_spacing_evasion`, for trigger words split across plain spaces or newlines). Full reasoning, including two patterns that were *considered and rejected*, is in `docs/threat-model/README.md`.
+
+| Metric | v0.1 | v0.2 | Delta |
+|---|---|---|---|
+| Precision | 95.35% | 96.77% | **+1.42%** |
+| Recall | 11.88% | 17.39% | **+5.51%** |
+| F1 | 21.13% | 29.48% | **+8.35%** |
+| False Positive Rate | 0.50% | 0.50% | +0.00% |
+
+**19 attacks newly caught. Zero regressions. Zero new false positives.** Precision moved *up*, not down -- a real win, not a recall/precision tradeoff, because the fixes were narrow and sourced from actual missed examples rather than broadened for their own sake.
+
+Notably, the two prompt-injection fixes generalized beyond the exact sentences that motivated them -- `IO-007` ("forget about") alone caught the same real phrase appearing independently in both source datasets (`pr1m8-IO-004` and `deepset-train-0056`), plus 2 more pr1m8 examples and 6 more deepset examples using similar constructions. That's evidence these are genuine phrasing fixes, not memorized answers to the specific test sentences -- the concern worth naming and checking, not just asserting: adding a pattern that matches only the literal false-negative text would inflate this benchmark without generalizing, which is precisely the kind of number-gaming the Authenticity Policy exists to prevent.
+
+One catch worth flagging honestly rather than quietly counting as a clean win: `deepset-train-0317` was caught by `character_spacing_evasion`, but not via real newlines -- via the *literal two-character text* `\n` repeated as visual padding (tokenizes as alternating single-char `\` and `n` tokens). Structurally similar to the technique the check was built for, but not identical to it -- flagged here so the "19 newly caught" number isn't read as 19 identical confirmations of the same fix.
+

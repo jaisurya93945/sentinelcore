@@ -15,6 +15,7 @@ from app.detectors.obfuscation.patterns import (
     HTML_ENTITY_RE,
     UNUSUAL_SPACE_CHARS,
     ZERO_WIDTH_CHARS,
+    find_character_spaced_runs,
     find_control_characters,
     find_mixed_script_runs,
 )
@@ -35,6 +36,7 @@ class ObfuscationDetector(BaseDetector):
         findings.extend(self._check_encoded_payload(text))
         findings.extend(self._check_html_entities(text))
         findings.extend(self._check_control_characters(text))
+        findings.extend(self._check_character_spacing(text))
         return findings
 
     def _check_char_table(
@@ -115,4 +117,21 @@ class ObfuscationDetector(BaseDetector):
                     "codepoints": sorted({f"U+{ord(ch):04X}" for ch, _ in hits}),
                 },
             )
+        ]
+
+    def _check_character_spacing(self, text: str) -> list[Finding]:
+        runs = find_character_spaced_runs(text)
+        return [
+            Finding(
+                detector=self.name,
+                type="character_spacing_evasion",
+                description=(
+                    f"Found {count} consecutive single-character tokens "
+                    f"(reconstructs to '{reconstructed[:40]}') -- a known technique for "
+                    "splitting trigger words with plain whitespace to evade phrase matching"
+                ),
+                severity=Severity.MEDIUM,
+                evidence={"reconstructed_text": reconstructed[:100], "token_count": count},
+            )
+            for reconstructed, count in runs
         ]

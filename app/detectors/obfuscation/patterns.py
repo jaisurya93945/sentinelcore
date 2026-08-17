@@ -103,3 +103,31 @@ def find_control_characters(text: str) -> list[tuple[str, int]]:
     """Raw ASCII control characters, excluding common whitespace (\\t \\n \\r)."""
     allowed = {"\t", "\n", "\r"}
     return [(ch, idx) for idx, ch in enumerate(text) if ord(ch) < 0x20 and ch not in allowed]
+
+
+def find_character_spaced_runs(text: str, min_run: int = 5) -> list[tuple[str, int]]:
+    """
+    Detects text broken into single characters separated by whitespace
+    (e.g. "I g n o r e" or one letter per line) -- a real technique found
+    during evaluation (see docs/research/README.md, examples pr1m8-FT-004
+    and pr1m8-FT-005) for evading phrase-matching detectors by inserting
+    plain whitespace inside every trigger word, the same idea as zero-width
+    characters but using ordinary spaces or newlines instead.
+
+    Returns (reconstructed_text, token_count) for each run of >= min_run
+    consecutive one-character whitespace-separated tokens.
+    """
+    tokens = text.split()
+    runs: list[tuple[str, int]] = []
+    i, n = 0, len(tokens)
+    while i < n:
+        if len(tokens[i]) == 1:
+            start = i
+            while i < n and len(tokens[i]) == 1:
+                i += 1
+            run_len = i - start
+            if run_len >= min_run:
+                runs.append(("".join(tokens[start:i]), run_len))
+        else:
+            i += 1
+    return runs

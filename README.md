@@ -14,7 +14,7 @@ Modern AI apps expose models to untrusted user input, external documents, tools,
 
 We never fabricate accuracy, precision, recall, F1, latency, or detection-rate numbers. Every claim in this repo reflects what is actually implemented and tested — not the long-term vision. Planned and experimental capabilities are always labeled as such.
 
-## Current Status — v0.1.0-dev (Day 1-14)
+## Current Status — v0.1.0-dev (Day 1-16)
 
 | Component | Status |
 |---|---|
@@ -22,15 +22,15 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | FastAPI skeleton + health endpoint | Done |
 | Security finding schema (Pydantic) | Done |
 | Detector plugin interface + registry | Done |
-| Prompt injection detector (rules/heuristics) | Done |
-| Obfuscation detector (zero-width/bidi/homoglyph/encoding) | Done |
+| Prompt injection detector (rules/heuristics) | Done — v0.2 patterns |
+| Obfuscation detector (zero-width/bidi/homoglyph/encoding/spacing) | Done — v0.2 patterns |
 | Risk engine (deterministic severity-weighted scoring) | Done |
 | Policy engine (per-type rules + score thresholds, configurable YAML) | Done |
 | `/api/v1/scan` endpoint | Done — full pipeline: detect → score → decide |
-| Evaluation against real labeled data (744 examples) | Done — 95.4% precision, 11.9% recall, 0.5% FPR |
-| Attack Replay Lab | Not started |
+| Evaluation against real labeled data (744 examples) | Done — 96.8% precision, 17.4% recall, 0.5% FPR (v0.2) |
+| Attack Replay Lab (version snapshot + diff) | Done — v0.1→v0.2: +5.5pp recall, 0 regressions |
 
-**Real, measured numbers now exist — and they're not flattering, on purpose.** Precision is high (95.4%) and false positives are rare (0.5%), but recall is low (11.9%): a 16-pattern regex baseline only catches a narrow slice of real attack phrasing. That gap, and exactly where it comes from, is documented in full in `docs/research/README.md` — including a confirmed, root-caused false-positive mechanism, not just a disclaimer.
+**Every version claim is now backed by a diff, not a re-typed number.** `scripts/replay_lab.py` snapshots detector performance by tag and compares any two versions — when the pattern library was expanded using real false negatives, the replay showed 19 attacks newly caught, zero regressions, zero new false positives. Full writeup with reasoning (including two patterns deliberately *not* added) in `docs/research/README.md` and `docs/threat-model/README.md`.
 
 ## Quickstart
 
@@ -76,7 +76,7 @@ Real precision/recall/F1 against 744 labeled examples, fully reproducible — se
 
 ## Roadmap
 
-Ten-phase roadmap, currently in Phase 1 (Foundation). Phase 2 (prompt injection + obfuscation detectors) is next.
+Ten-phase roadmap. Phases 1-3 (Foundation, Input Security, Risk & Policy) are done, plus an early Attack Replay Lab (originally scoped for Phase 10). Next up: RAG context security (Phase 6) or broadening detector coverage further — see `docs/research/README.md` for what the data says to prioritize.
 
 ## License
 

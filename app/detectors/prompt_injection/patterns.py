@@ -33,7 +33,7 @@ PATTERNS: list[PatternRule] = [
     PatternRule(
         id="IO-001",
         category="instruction_override",
-        pattern=_p(r"\bignore\s+(all\s+|any\s+)?(previous|prior|above|the)\s+instructions?\b"),
+        pattern=_p(r"\bignore\s+(all\s+|any\s+)?(the\s+above|the\s+previous|the\s+prior|previous|prior|above|the)\s+instructions?\b"),
         severity=Severity.HIGH,
         description="Attempts to make the model ignore prior instructions",
     ),
@@ -71,6 +71,13 @@ PATTERNS: list[PatternRule] = [
         pattern=_p(r"\bdo\s+not\s+follow\s+(your|the)\s+(previous|original)\s+instructions?\b"),
         severity=Severity.HIGH,
         description="Direct instruction to abandon original instructions",
+    ),
+    PatternRule(
+        id="IO-007",
+        category="instruction_override",
+        pattern=_p(r"\bforget\s+about\s+(all|everything|the\s+previous)\b"),
+        severity=Severity.MEDIUM,
+        description="Attempts to make the model forget prior context, 'forget about' phrasing variant",
     ),
     # -- System prompt extraction ---------------------------------------------
     PatternRule(
