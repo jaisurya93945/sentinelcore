@@ -6,25 +6,25 @@ What's actually built and running today (v0.2) — not the long-term vision. For
 
 ```mermaid
 flowchart TD
-    ScanClient["Client calling<br/>/api/v1/scan"] -->|text + retrieved_documents| ScanAPI["Scan Endpoint<br/>app/api/v1/scan.py"]
-    ProxyClient["Client with base_url<br/>pointed at SentinelCore"] -->|POST /v1/chat/completions| ProxyAPI["Proxy Endpoint<br/>app/api/v1/proxy.py"]
-    ScanAPI --> Registry["Detector Registry<br/>app/detectors/registry.py"]
+    ScanClient["Client calling /api/v1/scan"] -->|"text + retrieved_documents + output_text"| ScanAPI[Scan Endpoint]
+    ProxyClient["Client with base_url<br/>pointed at SentinelCore"] -->|POST /v1/chat/completions| ProxyAPI[Proxy Endpoint]
+    ScanAPI --> Registry["Detector Registry<br/>4 detectors: prompt_injection,<br/>obfuscation, pii, secrets"]
     ProxyAPI --> Registry
-    Registry --> PI["PromptInjectionDetector"]
-    Registry --> OB["ObfuscationDetector"]
-    PI --> Findings["Findings<br/>origin: input or context:i"]
-    OB --> Findings
-    Findings --> Risk["Risk Engine"]
+    Registry --> Findings["Findings<br/>origin: input / context:i / output"]
+    Findings --> Risk[Risk Engine]
     Findings --> Policy[Policy Engine]
     Risk -->|risk_score| Policy
-    Policy -->|reads| YAML[policy.yaml]
     Policy --> Decision["Decision:<br/>ALLOW / WARN / SANITIZE / BLOCK"]
     Decision --> ScanResponse[ScanResult JSON]
     ScanResponse --> ScanClient
-    Decision -->|BLOCK| BlockResp["Blocked response<br/>(upstream never called)"]
-    Decision -->|"ALLOW / WARN / SANITIZE"| Forward["Forward request<br/>app/services/proxy.py"]
+    Decision -->|input BLOCK| BlockResp["Blocked -- upstream never called"]
+    Decision -->|"input ALLOW / WARN / SANITIZE"| Forward[Forward to upstream]
     Forward --> Upstream["Real LLM Provider<br/>(configurable base URL)"]
-    Upstream --> ProxyClient
+    Upstream -->|response text| OutputScan["Scan output<br/>(same Registry, same pipeline)"]
+    OutputScan -->|output BLOCK| OutputBlockResp["Blocked -- upstream already<br/>called, client never sees it"]
+    OutputScan -->|"output ALLOW / WARN / SANITIZE"| ReturnResp[Return response]
+    ReturnResp --> ProxyClient
+    OutputBlockResp --> ProxyClient
     BlockResp --> ProxyClient
 ```
 
@@ -36,10 +36,12 @@ flowchart TD
 | **Detector interface** | `app/detectors/base.py`, `registry.py` | Every detector subclasses `BaseDetector` and self-registers with `@register_detector`. The gateway discovers detectors through the registry — it never imports a specific detector class by name. This is what makes adding a detector a no-core-changes operation (see `CONTRIBUTING.md`). |
 | **Prompt injection detector** | `app/detectors/prompt_injection/` | Regex/heuristic phrase matching. Looks at what the text *means*. |
 | **Obfuscation detector** | `app/detectors/obfuscation/` | Character/encoding-level checks. Looks at how the text is *encoded*, independent of meaning — a deliberately different mechanism than prompt_injection. See `docs/threat-model/README.md` for why both are needed together. |
+| **PII detector** | `app/detectors/pii/` | Emails, phone numbers, SSNs, credit card-shaped numbers, IPs. Matched text is always redacted before it reaches a `Finding` — never stored or returned raw. |
+| **Secret detector** | `app/detectors/secrets/` | AWS keys, private key blocks, generic API key assignments, JWTs, bearer tokens, DB connection strings. Same redaction guarantee as PII. |
 | **Risk engine** | `app/services/risk_engine.py` | Combines findings into one 0-100 score. Deterministic, no ML. |
 | **Policy engine** | `app/services/policy_engine.py`, `policy.yaml` | Maps findings + score to a final decision. Two layers (per-type rules, then score thresholds), most-severe-wins. Fully configurable without code changes. |
-| **Scan endpoint** | `app/api/v1/scan.py` | Wires the above into one request: detect → score → decide. Also scans optional `retrieved_documents` (RAG context) through the same detectors, tagging each finding's `origin` so indirect injection (a retrieved document, not the user) is distinguishable from direct input. |
-| **Reverse proxy** | `app/api/v1/proxy.py`, `app/services/proxy.py` | `POST /v1/chat/completions` -- an OpenAI-path-compatible drop-in gateway. Scans through the identical detector → risk → policy pipeline as the scan endpoint (no separate detection logic); BLOCK decisions never reach the upstream provider, everything else forwards through with the client's credentials passed through untouched. |
+| **Scan endpoint** | `app/api/v1/scan.py` | Wires the above into one request: detect → score → decide. Scans `text` (origin `input`), optional `retrieved_documents` (origin `context:<i>`), and optional `output_text` (origin `output`) through the identical pipeline. |
+| **Reverse proxy** | `app/api/v1/proxy.py`, `app/services/proxy.py` | `POST /v1/chat/completions` — an OpenAI-path-compatible drop-in gateway. Scans the request *and* the upstream's actual response through the same pipeline; a BLOCK on either side means the caller never sees the content. Credentials pass through untouched. |
 
 ## Why detectors are separate from risk/policy
 
@@ -57,4 +59,4 @@ These live outside `app/` deliberately — they're development-time tooling the 
 
 ## What's not in this diagram yet
 
-RAG context inspection, agent/tool-call inspection, and output scanning are all designed in the original project doc but not implemented — see the Current Status table in the main README for exactly what's done vs planned.
+Agent/tool-call inspection, MCP security, and audit/observability logging are designed but not implemented — see the Current Status table in the main README for exactly what's done vs planned.

@@ -4,14 +4,14 @@ Scan endpoint.
 Runs every registered detector against the main input, then the Risk
 Engine and Policy Engine to produce a final risk score and decision.
 
-Also scans any RAG-retrieved documents for indirect prompt injection --
-the same well-known attack class where a malicious webpage or document
-gets retrieved into context and its hidden instructions get treated as
-real ones. This deliberately reuses the existing detectors rather than
-adding a new one: the detection logic doesn't change, only *where* it
-looks. Findings from retrieved documents are tagged origin='context:<i>'
-so a reviewer can immediately tell "the user wrote this" apart from
-"a retrieved document said this".
+Also scans:
+- RAG-retrieved documents for indirect prompt injection (findings tagged
+  origin='context:<i>')
+- an optional candidate output_text for PII/secret leakage before it's
+  sent anywhere (findings tagged origin='output')
+
+Deliberately reuses the existing detectors for all three -- no separate
+detection logic exists per input source, only per attack category.
 """
 
 from fastapi import APIRouter
@@ -40,6 +40,14 @@ def scan(payload: ScanRequest) -> ScanResult:
             for finding in doc_findings:
                 finding.origin = f"context:{i}"
             result.findings.extend(doc_findings)
+
+    # Candidate output -- PII/secret leakage before it reaches anyone.
+    if payload.output_text:
+        for detector_cls in detectors.values():
+            output_findings = detector_cls().detect(payload.output_text)
+            for finding in output_findings:
+                finding.origin = "output"
+            result.findings.extend(output_findings)
 
     result.risk_score = calculate_risk_score(result.findings)
     result.decision = decide(result.findings, result.risk_score)

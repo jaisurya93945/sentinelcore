@@ -1,7 +1,8 @@
 """Tests for the /v1/chat/completions reverse proxy. Upstream calls are
 mocked with respx -- no real API key or network access needed, and the
-mock lets us assert whether the upstream was called at all, which is
-the actual thing worth proving: a BLOCK decision must never reach it."""
+mock lets us assert whether the upstream was called at all."""
+
+import json
 
 import httpx
 import respx
@@ -16,7 +17,7 @@ UPSTREAM_CHAT_URL = f"{settings.upstream_base_url}/v1/chat/completions"
 
 
 @respx.mock
-def test_blocked_request_never_reaches_upstream():
+def test_blocked_input_never_reaches_upstream():
     upstream_route = respx.post(UPSTREAM_CHAT_URL).mock(
         return_value=httpx.Response(200, json={"choices": [{"message": {"content": "should never see this"}}]})
     )
@@ -31,13 +32,13 @@ def test_blocked_request_never_reaches_upstream():
     )
     assert response.status_code == 400
     body = response.json()
-    assert body["error"]["type"] == "sentinelcore_blocked"
+    assert body["error"]["type"] == "sentinelcore_input_blocked"
     assert body["sentinelcore"]["decision"] == "block"
     assert not upstream_route.called
 
 
 @respx.mock
-def test_clean_request_forwarded_to_upstream():
+def test_clean_request_forwarded_with_both_input_and_output_headers():
     respx.post(UPSTREAM_CHAT_URL).mock(
         return_value=httpx.Response(200, json={"choices": [{"message": {"content": "Paris is the capital of France."}}]})
     )
@@ -47,8 +48,50 @@ def test_clean_request_forwarded_to_upstream():
     )
     assert response.status_code == 200
     assert response.json()["choices"][0]["message"]["content"] == "Paris is the capital of France."
-    assert response.headers["x-sentinelcore-decision"] == "allow"
-    assert response.headers["x-sentinelcore-risk-score"] == "0"
+    assert response.headers["x-sentinelcore-input-decision"] == "allow"
+    assert response.headers["x-sentinelcore-output-decision"] == "allow"
+
+
+@respx.mock
+def test_output_secret_leak_blocks_response_but_upstream_was_already_called():
+    """The realistic case this exists for: the request looks fine, the
+    model itself leaks a credential in its reply. Unlike input blocking,
+    the upstream call has already happened by the time this is caught --
+    that's a real, documented limitation of post-hoc output filtering."""
+    upstream_route = respx.post(UPSTREAM_CHAT_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "Sure, here's the key: AKIAIOSFODNN7EXAMPLE"}}]},
+        )
+    )
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4", "messages": [{"role": "user", "content": "What's our AWS access key?"}]},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["error"]["type"] == "sentinelcore_output_blocked"
+    assert body["sentinelcore"]["decision"] == "block"
+    assert "AKIAIOSFODNN7EXAMPLE" not in json.dumps(body)  # redacted, never leaked to the client
+    assert upstream_route.called
+
+
+@respx.mock
+def test_output_pii_leak_flagged_via_headers_not_blocked():
+    """A single low-severity email in the output is real but shouldn't be
+    a hard block on its own -- proves the policy engine's graduated
+    response applies on the output side too, not just input."""
+    respx.post(UPSTREAM_CHAT_URL).mock(
+        return_value=httpx.Response(
+            200, json={"choices": [{"message": {"content": "You can reach support at help@example.com."}}]}
+        )
+    )
+    response = client.post(
+        "/v1/chat/completions",
+        json={"model": "gpt-4", "messages": [{"role": "user", "content": "How do I contact support?"}]},
+    )
+    assert response.status_code == 200
+    assert response.headers["x-sentinelcore-output-decision"] == "warn"
 
 
 @respx.mock

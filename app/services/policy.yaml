@@ -21,6 +21,21 @@ rules:
   unusual_whitespace: sanitize
   control_characters: sanitize
   character_spacing_evasion: sanitize
+  # Secrets: unambiguous credentials -- no safe partial fix, block outright.
+  aws_access_key: block
+  private_key: block
+  generic_api_key: block
+  db_connection_string: block
+  jwt_token: warn
+  bearer_token: warn
+  # PII: sensitive identifiers block; common/low-stakes fields warn --
+  # blocking every email mention would make the gateway useless for
+  # ordinary support/contact use cases.
+  ssn: block
+  credit_card: block
+  email_address: warn
+  phone_number: warn
+  ip_address: warn
 
 # Fallback thresholds (risk score 0-100) for any finding type not covered
 # by an explicit rule above.

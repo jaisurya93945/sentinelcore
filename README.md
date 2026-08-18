@@ -28,19 +28,21 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Detector plugin interface + registry | Done |
 | Prompt injection detector (rules/heuristics) | Done — v0.2 patterns |
 | Obfuscation detector (zero-width/bidi/homoglyph/encoding/spacing) | Done — v0.2 patterns |
+| PII detector (email/phone/SSN/credit card/IP, redacted evidence) | Done |
+| Secret detector (AWS keys/private keys/API keys/JWTs/DB strings) | Done |
 | Risk engine (deterministic severity-weighted scoring) | Done |
 | Policy engine (per-type rules + score thresholds, configurable YAML) | Done |
-| `/api/v1/scan` endpoint | Done — full pipeline: detect → score → decide |
-| RAG context scanning (indirect prompt injection, origin-tagged) | Done |
-| Reverse proxy gateway (`/v1/chat/completions`, OpenAI-path-compatible) | Done — non-streaming only |
+| `/api/v1/scan` endpoint | Done — input, RAG context, and output, one pipeline |
+| Reverse proxy gateway (`/v1/chat/completions`, OpenAI-path-compatible) | Done — scans request **and** response, non-streaming only |
 | Evaluation against real labeled data (744 examples) | Done — 96.8% precision, 17.4% recall, 0.5% FPR (v0.2) |
 | Attack Replay Lab (version snapshot + diff) | Done — v0.1→v0.2: +5.5pp recall, 0 regressions |
+| Audit logging / persistence | Not started |
 | Streaming proxy support | Not started |
 | Agent/tool-call inspection | Not started |
-| Output scanning | Not started |
+| MCP security | Not started |
 | Dashboard | Not started |
 
-**This is now a gateway you can sit real traffic behind, not just an API you remember to call.** Point an OpenAI-SDK-compatible client's `base_url` at SentinelCore and requests get scanned before they reach your actual LLM provider — a BLOCK decision never reaches upstream, proven with a mocked-upstream test asserting zero calls, not just a status code check. Configure the real upstream via `SENTINELCORE_UPSTREAM_BASE_URL`. Full limitations (streaming isn't supported yet, malformed bodies fail open, not tested against a real provider) in `docs/threat-model/README.md`.
+**Output is now scanned, not just input.** The gateway checks the model's actual reply for leaked secrets and PII before it reaches the caller — proven, not just described: a test asserts the upstream mock *was* called (the response was generated) even though the client only ever sees a redacted block message, never the real AWS key. Every matched secret/PII value is redacted before it's stored anywhere, including in the tool's own findings. Full design reasoning and honest limits (no Luhn validation, no name/address detection, output blocking still costs the upstream call) in `docs/threat-model/README.md`.
 
 ## Quickstart
 

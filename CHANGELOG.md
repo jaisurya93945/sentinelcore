@@ -7,11 +7,14 @@ Every entry here corresponds to a real, tested commit — see `git log` for the 
 ### Added
 - RAG context scanning — `retrieved_documents` on `/api/v1/scan`, findings tagged by `origin` (`input` vs `context:<i>`) to distinguish direct from indirect prompt injection. No new detector needed; reuses the existing two.
 - Reverse proxy gateway — `POST /v1/chat/completions`, OpenAI-path-compatible. Point an existing client's `base_url` at SentinelCore; BLOCK decisions never reach the upstream provider (verified with a mocked-upstream test asserting zero calls, not just a status code). Configurable upstream via `SENTINELCORE_UPSTREAM_BASE_URL`.
+- Output security — new PII and secret/credential detectors, wired into both `/api/v1/scan` (`output_text` field) and the proxy's actual response path. Matched values are always redacted before reaching a `Finding` — never stored raw. Proxy now scans and can block on both the request *and* the response.
 
 ### Known gaps (documented, not hidden)
 - Streaming (`stream: true`) is explicitly rejected with a clear error, not silently mishandled
 - Not yet tested against a real LLM provider — the dev sandbox has no network access to verify that end-to-end
 - SANITIZE still doesn't transform anything anywhere in the codebase — it's a valid decision, nothing executes it yet
+- Output BLOCK still costs the upstream call — post-hoc filtering can stop a leak from reaching the client, not the cost of generating it
+- No Luhn validation on credit card matches, no name/address PII detection (needs NLP, not regex)
 
 ## v0.2 (detector patterns) — part of v0.1.0-dev
 

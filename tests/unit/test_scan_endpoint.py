@@ -105,3 +105,35 @@ def test_scan_tags_origin_by_document_index():
     assert response.status_code == 200
     origins = {f["origin"] for f in response.json()["findings"]}
     assert origins == {"context:1"}
+
+
+def test_scan_output_text_clean_no_findings():
+    response = client.post(
+        "/api/v1/scan",
+        json={"text": "Summarize our refund policy.", "output_text": "Refunds are processed within 5 business days."},
+    )
+    assert response.status_code == 200
+    assert response.json()["findings"] == []
+
+
+def test_scan_output_text_secret_leak_detected_and_tagged():
+    response = client.post(
+        "/api/v1/scan",
+        json={
+            "text": "What's our AWS key?",
+            "output_text": "Sure, here's the key: AKIAIOSFODNN7EXAMPLE",
+        },
+    )
+    assert response.status_code == 200
+    body = response.json()
+    output_findings = [f for f in body["findings"] if f["origin"] == "output"]
+    assert len(output_findings) >= 1
+    assert output_findings[0]["type"] == "aws_access_key"
+    assert body["decision"] == "block"
+    # The secret itself must never appear anywhere in the response.
+    assert "AKIAIOSFODNN7EXAMPLE" not in response.text
+
+
+def test_scan_output_text_omitted_is_backward_compatible():
+    response = client.post("/api/v1/scan", json={"text": "hello"})
+    assert response.status_code == 200

@@ -45,7 +45,11 @@ class Finding(BaseModel):
     )
     origin: str = Field(
         default="input",
-        description="Where this finding was found: 'input' for the main text, or 'context:<index>' for the Nth retrieved/RAG document",
+        description=(
+            "Where this finding was found: 'input' for the main text, "
+            "'context:<index>' for the Nth retrieved/RAG document, or "
+            "'output' for the LLM's response"
+        ),
     )
     evidence: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
@@ -81,5 +85,13 @@ class ScanRequest(BaseModel):
             "RAG-retrieved documents to also scan for indirect prompt injection, "
             "in addition to the main input text. Each finding from these is "
             "tagged origin='context:<index>' to distinguish it from the user's own words."
+        ),
+    )
+    output_text: str | None = Field(
+        default=None,
+        description=(
+            "A candidate LLM response to scan before it's sent to a user or "
+            "downstream system -- e.g. PII or secret leakage. Findings are "
+            "tagged origin='output'. Optional; omit for input-only scanning."
         ),
     )

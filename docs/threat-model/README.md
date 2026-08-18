@@ -55,7 +55,38 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 ## Not yet implemented
 
-See the Current Status table in `README.md` for the full list (agent/tool misuse, output leakage, actual sanitization execution, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support).
+See the Current Status table in `README.md` for the full list (agent/tool misuse, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support, sanitize execution).
+
+## Implemented: Output Security (PII + Secrets)
+
+**Modules:** `app/detectors/pii/`, `app/detectors/secrets/`
+**Wired into:** `/api/v1/scan` (optional `output_text` field) and `/v1/chat/completions` (the assistant's actual reply, scanned before it reaches the caller).
+
+Two detectors, kept separate on purpose: PII and secrets have very different false-positive profiles and severities. An AWS key match is nearly unambiguous; an email address is common and usually fine. Both apply to *any* text passed to them -- the same detectors also run on input and RAG context, since nothing about the pattern matching cares which direction the text is flowing. What's new here is actually pointing them at LLM output, which nothing in this project did before.
+
+### Categories covered
+
+| Category | Detector | Severity | Policy |
+|---|---|---|---|
+| `aws_access_key`, `private_key` | secrets | CRITICAL | block |
+| `generic_api_key`, `db_connection_string` | secrets | HIGH | block |
+| `jwt_token`, `bearer_token` | secrets | MEDIUM | warn |
+| `ssn`, `credit_card` | pii | HIGH | block |
+| `email_address`, `phone_number`, `ip_address` | pii | LOW | warn |
+
+### A deliberate design decision: findings never contain the raw secret
+
+Every match is redacted (first two + last two characters, everything else masked) before it goes into a `Finding`. A security tool whose own findings, logs, or audit trail became a *new* leak vector for the exact secrets it found would be a real anti-pattern, not just a limitation -- so this isn't optional or configurable in v0.1, it's the only behavior.
+
+### Output blocking has a cost the input side doesn't
+
+For `/v1/chat/completions`, an **input** BLOCK prevents the upstream call entirely. An **output** BLOCK cannot -- by the time a secret is found in the model's reply, the upstream call has already happened and been paid for. SentinelCore can stop the leak from reaching the client, but not the cost of generating it. This is a structural limitation of post-hoc output filtering versus e.g. constrained decoding, not something fixable by this gateway alone. Proven, not just stated -- `tests/unit/test_proxy.py::test_output_secret_leak_blocks_response_but_upstream_was_already_called` asserts the upstream mock *was* called even though the client never sees the leaked content.
+
+### Known limitations
+
+- **Regex only, no Luhn validation on credit cards** -- will false-positive on card-shaped numbers that aren't valid, and miss real numbers in unusual formats.
+- **No name/address detection.** Those need NLP/NER, not pattern matching -- this is deterministic PII detection, not comprehensive PII detection, and the gap is real.
+- **Confirmed empirically, not assumed:** re-running `scripts/evaluate.py` after adding these detectors produced identical precision/recall/FPR to before (96.77%/17.39%/0.50%) -- the existing 744-example prompt-injection dataset contains no PII/secret-shaped content, so this addition didn't introduce new false positives on it. That's a check that happened to come back clean, not a guarantee it always will on different data.
 
 ## Implemented: Reverse Proxy Gateway
 
