@@ -18,6 +18,7 @@ from fastapi import APIRouter
 
 from app.detectors.registry import get_registered_detectors
 from app.models.finding import ScanRequest, ScanResult
+from app.services.audit_log import log_scan_event
 from app.services.policy_engine import decide
 from app.services.risk_engine import calculate_risk_score
 
@@ -51,5 +52,6 @@ def scan(payload: ScanRequest) -> ScanResult:
 
     result.risk_score = calculate_risk_score(result.findings)
     result.decision = decide(result.findings, result.risk_score)
+    log_scan_event(result.scan_id, "scan", result.risk_score, result.decision.value, result.findings)
 
     return result

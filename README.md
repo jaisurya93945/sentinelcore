@@ -36,13 +36,13 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Reverse proxy gateway (`/v1/chat/completions`, OpenAI-path-compatible) | Done — scans request **and** response, non-streaming only |
 | Evaluation against real labeled data (744 examples) | Done — 96.8% precision, 17.4% recall, 0.5% FPR (v0.2) |
 | Attack Replay Lab (version snapshot + diff) | Done — v0.1→v0.2: +5.5pp recall, 0 regressions |
-| Audit logging / persistence | Not started |
+| Audit logging (metadata-only SQLite trail) | Done — queryable via `GET /api/v1/audit/recent` |
 | Streaming proxy support | Not started |
 | Agent/tool-call inspection | Not started |
 | MCP security | Not started |
 | Dashboard | Not started |
 
-**Output is now scanned, not just input.** The gateway checks the model's actual reply for leaked secrets and PII before it reaches the caller — proven, not just described: a test asserts the upstream mock *was* called (the response was generated) even though the client only ever sees a redacted block message, never the real AWS key. Every matched secret/PII value is redacted before it's stored anywhere, including in the tool's own findings. Full design reasoning and honest limits (no Luhn validation, no name/address detection, output blocking still costs the upstream call) in `docs/threat-model/README.md`.
+**Every decision is now auditable.** `/api/v1/scan` and both stages of `/v1/chat/completions` (input and output, correlated by one `scan_id`) log to a persistent trail — but metadata only: type, severity, origin, decision, risk score. Never raw text, never finding evidence. That's a deliberate boundary, not a shortcut — a "redacted" text preview built from detectors with known gaps (no name/address detection, no Luhn check) would be a false sense of safety, so v1 doesn't pretend to offer one. Full reasoning in `docs/threat-model/README.md`.
 
 ## Quickstart
 

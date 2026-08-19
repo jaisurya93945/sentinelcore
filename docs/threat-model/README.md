@@ -57,6 +57,23 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 See the Current Status table in `README.md` for the full list (agent/tool misuse, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support, sanitize execution).
 
+## Implemented: Audit Logging
+
+**Module:** `app/services/audit_log.py`, queryable via `GET /api/v1/audit/recent`
+
+Every decision from `/api/v1/scan` and `/v1/chat/completions` (both the input and output scan stages, sharing one `scan_id` so they can be correlated) gets persisted to SQLite: `scan_id`, timestamp, endpoint, risk score, decision, and a findings summary (`type`/`severity`/`origin`/`detector` only).
+
+### What's deliberately never stored
+
+**Raw input text, output text, and finding `evidence` (which can contain matched-text fragments) are never persisted.** This was a real design decision, not an oversight: the tempting alternative -- store a "redacted" text preview using the same regex detectors already in this codebase -- would be a false sense of safety. Those detectors have documented gaps (no name/address PII detection, no Luhn validation, English-pattern-only prompt injection). Calling a preview "redacted" when the redaction itself is known-incomplete is worse than not storing text at all, because it implies a guarantee that doesn't exist. Demonstrated, not just claimed: `tests/unit/test_audit_log.py::test_findings_summary_has_no_evidence_or_raw_text` asserts the stored record's keys are exactly `{type, severity, origin, detector}` -- nothing else can leak in.
+
+### Known limitations
+
+- **Synchronous SQLite, one connection per write.** Fine for a v1 low-throughput baseline; real concurrent load would need an async driver or connection pooling, neither of which exists here.
+- **Logging failures are always swallowed, never raised** -- a broken audit log must never break an actual scan or proxy response. This means a silent logging failure is possible in principle; it's logged as a Python warning, not surfaced to the caller.
+- **No retention policy, no rotation, no export tooling.** The table grows unbounded. Fine for now, a real gap for long-running production use.
+- **No identity/session tracking** -- there's no concept of "who" made a request yet (that needs the identity/auth system described as a blocked prerequisite for RBAC/ABAC), so events can't be filtered by user or correlated across a session.
+
 ## Implemented: Output Security (PII + Secrets)
 
 **Modules:** `app/detectors/pii/`, `app/detectors/secrets/`

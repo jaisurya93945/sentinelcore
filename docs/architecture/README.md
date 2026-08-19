@@ -42,6 +42,7 @@ flowchart TD
 | **Policy engine** | `app/services/policy_engine.py`, `policy.yaml` | Maps findings + score to a final decision. Two layers (per-type rules, then score thresholds), most-severe-wins. Fully configurable without code changes. |
 | **Scan endpoint** | `app/api/v1/scan.py` | Wires the above into one request: detect → score → decide. Scans `text` (origin `input`), optional `retrieved_documents` (origin `context:<i>`), and optional `output_text` (origin `output`) through the identical pipeline. |
 | **Reverse proxy** | `app/api/v1/proxy.py`, `app/services/proxy.py` | `POST /v1/chat/completions` — an OpenAI-path-compatible drop-in gateway. Scans the request *and* the upstream's actual response through the same pipeline; a BLOCK on either side means the caller never sees the content. Credentials pass through untouched. |
+| **Audit log** | `app/services/audit_log.py`, `app/api/v1/audit.py` | Persists every decision (SQLite) as metadata only — `scan_id`, timestamp, endpoint, risk score, decision, finding summary. Never raw text, never finding evidence. Queryable via `GET /api/v1/audit/recent`. Runs alongside the flow above rather than gating it — logging failures never block a response. |
 
 ## Why detectors are separate from risk/policy
 
@@ -59,4 +60,4 @@ These live outside `app/` deliberately — they're development-time tooling the 
 
 ## What's not in this diagram yet
 
-Agent/tool-call inspection, MCP security, and audit/observability logging are designed but not implemented — see the Current Status table in the main README for exactly what's done vs planned.
+Agent/tool-call inspection and MCP security are designed but not implemented — see the Current Status table in the main README for exactly what's done vs planned.

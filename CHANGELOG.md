@@ -8,6 +8,7 @@ Every entry here corresponds to a real, tested commit — see `git log` for the 
 - RAG context scanning — `retrieved_documents` on `/api/v1/scan`, findings tagged by `origin` (`input` vs `context:<i>`) to distinguish direct from indirect prompt injection. No new detector needed; reuses the existing two.
 - Reverse proxy gateway — `POST /v1/chat/completions`, OpenAI-path-compatible. Point an existing client's `base_url` at SentinelCore; BLOCK decisions never reach the upstream provider (verified with a mocked-upstream test asserting zero calls, not just a status code). Configurable upstream via `SENTINELCORE_UPSTREAM_BASE_URL`.
 - Output security — new PII and secret/credential detectors, wired into both `/api/v1/scan` (`output_text` field) and the proxy's actual response path. Matched values are always redacted before reaching a `Finding` — never stored raw. Proxy now scans and can block on both the request *and* the response.
+- Audit logging — every decision from `/api/v1/scan` and both proxy stages persisted to SQLite, queryable via `GET /api/v1/audit/recent`. Metadata only (scan_id, timestamp, endpoint, risk score, decision, finding types/severities) — deliberately never raw text or finding evidence, since a "redacted" preview built from detectors with known gaps would be a false guarantee, not real safety.
 
 ### Known gaps (documented, not hidden)
 - Streaming (`stream: true`) is explicitly rejected with a clear error, not silently mishandled

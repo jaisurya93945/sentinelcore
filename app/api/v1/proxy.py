@@ -12,12 +12,14 @@ for this and every other documented limitation of the proxy.
 """
 
 import json
+import uuid
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse, Response
 
 from app.detectors.registry import get_registered_detectors
 from app.models.finding import Decision, Finding
+from app.services.audit_log import log_scan_event
 from app.services.policy_engine import decide
 from app.services.proxy import forward_to_upstream
 from app.services.risk_engine import calculate_risk_score
@@ -135,6 +137,9 @@ async def chat_completions(request: Request):
     input_risk_score = calculate_risk_score(input_findings)
     input_decision = decide(input_findings, input_risk_score)
 
+    scan_id = str(uuid.uuid4())  # shared by both log entries for this request
+    log_scan_event(scan_id, "proxy_input", input_risk_score, input_decision.value, input_findings)
+
     if input_decision == Decision.BLOCK:
         return _blocked_response(input_findings, input_risk_score, input_decision, stage="input")
 
@@ -154,6 +159,7 @@ async def chat_completions(request: Request):
     output_findings = _scan_text(assistant_text, origin="output") if assistant_text else []
     output_risk_score = calculate_risk_score(output_findings)
     output_decision = decide(output_findings, output_risk_score)
+    log_scan_event(scan_id, "proxy_output", output_risk_score, output_decision.value, output_findings)
 
     if output_decision == Decision.BLOCK:
         return _blocked_response(output_findings, output_risk_score, output_decision, stage="output")

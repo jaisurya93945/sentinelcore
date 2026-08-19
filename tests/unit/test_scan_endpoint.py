@@ -137,3 +137,12 @@ def test_scan_output_text_secret_leak_detected_and_tagged():
 def test_scan_output_text_omitted_is_backward_compatible():
     response = client.post("/api/v1/scan", json={"text": "hello"})
     assert response.status_code == 200
+
+
+def test_scan_writes_an_audit_event():
+    from app.services.audit_log import get_recent_events
+
+    client.post("/api/v1/scan", json={"text": "a fresh unique scan for audit checking"})
+    events = get_recent_events(limit=1)
+    assert len(events) == 1
+    assert events[0]["endpoint"] == "scan"
