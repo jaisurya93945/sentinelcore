@@ -39,12 +39,12 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Audit logging (metadata-only SQLite trail) | Done — queryable via `GET /api/v1/audit/recent` |
 | Docker (multi-stage, non-root) | Done — not build-tested here, see caveat in `Dockerfile` |
 | Dependency scanning (`pip-audit`, blocking CI gate) | Done — clean as of this writing |
+| Agent/tool-call inspection (`/api/v1/scan/tool-call`) | Done — deterministic tool authorization + content scanning |
 | Streaming proxy support | Not started |
-| Agent/tool-call inspection | Not started |
 | MCP security | Not started |
 | Dashboard | Not started |
 
-**All 5 items from the last committed plan are now shipped.** Docker comes with an explicit, prominent caveat instead of a false claim of confidence: it was never build-tested in this project's own dev environment (no Docker there), so "written to best practice" and "verified working" are kept as two different claims, not blurred into one. Dependency scanning is a real blocking CI gate now, not just a report — verified clean today, and re-checked on every push going forward, since a clean scan is a snapshot, not a permanent guarantee.
+**Tool calls now get checked two independent ways.** Tool *name* authorization (allow/warn/sanitize/human_approval/block, configurable per tool) is a deterministic lookup, never a risk score — "is this agent allowed to call `payment.transfer`" doesn't get more true by combining severities. Tool *arguments and responses* get scanned through the same detector pipeline as everything else, with tool responses treated as untrusted input, same principle as RAG documents. Live-verified across 4 scenarios, including the one that actually matters: a permitted tool whose response was poisoned still gets blocked. Full reasoning and honest limits (origin still doesn't weight policy, no intent alignment, no tool chaining) in `docs/threat-model/README.md`.
 
 ## Quickstart
 

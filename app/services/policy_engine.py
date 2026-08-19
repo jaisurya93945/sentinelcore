@@ -1,8 +1,8 @@
 """
 Policy Engine.
 
-Maps findings + risk score to a final Decision (ALLOW/WARN/SANITIZE/BLOCK).
-Two layers, most-severe-wins:
+Maps findings + risk score to a final Decision
+(ALLOW/WARN/SANITIZE/HUMAN_APPROVAL/BLOCK). Two layers, most-severe-wins:
 
   1. Per-finding-type rules (policy.yaml) -- if any finding matches a rule,
      that rule's decision is a candidate.
@@ -12,6 +12,12 @@ Two layers, most-severe-wins:
 The final decision is the single most severe candidate across both layers.
 Deterministic and fully configurable via policy.yaml -- no hidden logic.
 See docs/threat-model/README.md for design notes and known limitations.
+
+`most_severe` is exported (not private) because tool-call scanning
+(app/api/v1/tool_call.py) needs to combine this engine's content-based
+decision with a completely separate, deterministic tool-name authorization
+lookup (app/services/tool_policy.py) using the exact same severity
+ordering, rather than duplicating it.
 """
 
 from pathlib import Path
@@ -23,8 +29,10 @@ from app.models.finding import Decision, Finding
 DEFAULT_POLICY_PATH = Path(__file__).parent / "policy.yaml"
 
 # Most severe first -- used to pick the single final decision when
-# multiple candidate decisions are in play.
-_DECISION_SEVERITY = [Decision.BLOCK, Decision.SANITIZE, Decision.WARN, Decision.ALLOW]
+# multiple candidate decisions are in play. HUMAN_APPROVAL sits between
+# BLOCK and SANITIZE: less final than an outright block (a human could
+# still say yes), but more cautious than auto-sanitizing and proceeding.
+_DECISION_SEVERITY = [Decision.BLOCK, Decision.HUMAN_APPROVAL, Decision.SANITIZE, Decision.WARN, Decision.ALLOW]
 
 
 def load_policy(path: Path | None = None) -> dict:
@@ -33,7 +41,7 @@ def load_policy(path: Path | None = None) -> dict:
         return yaml.safe_load(f)
 
 
-def _most_severe(decisions: list[Decision]) -> Decision:
+def most_severe(decisions: list[Decision]) -> Decision:
     for candidate in _DECISION_SEVERITY:
         if candidate in decisions:
             return candidate
@@ -62,4 +70,4 @@ def decide(findings: list[Finding], risk_score: int, policy: dict | None = None)
     else:
         candidates.append(Decision.ALLOW)
 
-    return _most_severe(candidates)
+    return most_severe(candidates)

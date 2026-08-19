@@ -55,7 +55,41 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 ## Not yet implemented
 
-See the Current Status table in `README.md` for the full list (agent/tool misuse, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support, sanitize execution).
+See the Current Status table in `README.md` for the full list (MCP security, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support, sanitize execution, origin-aware policy).
+
+## Implemented: Agent / Tool-Call Inspection
+
+**Modules:** `app/services/tool_policy.py`, `app/detectors/tool_arguments/`
+**Endpoint:** `POST /api/v1/scan/tool-call`
+
+Two genuinely independent checks, combined:
+
+1. **Tool-name authorization** (`tool_policy.py`, configured in `tool_policy.yaml`) — a deterministic allow/warn/sanitize/human_approval/block lookup by tool name. Not risk-scored, on purpose: whether an agent may call `payment.transfer` doesn't become more or less true by combining severities the way "how suspicious is this text" does. This is the concrete implementation of a principle worth stating plainly: **the LLM must never be the ultimate authorization authority.** The lookup happens entirely outside anything the model decided.
+2. **Content scanning** — the same detector registry as every other endpoint, applied to the JSON-serialized arguments (`origin: tool_arguments`) and, if provided, the tool's response (`origin: tool_response`). A tool response is untrusted input, exactly the same principle as a RAG-retrieved document — an agent's own tool call doesn't make what comes back automatically trustworthy.
+
+The final decision is the more severe of the two, arrived at independently. A live check across four real scenarios, not just unit assertions:
+
+| Tool | Arguments | Response | Tool auth | Findings | Decision |
+|---|---|---|---|---|---|
+| `web.search` | benign query | — | allow | 0 | **allow** |
+| `database.delete` | benign table name | — | block | 0 | **block** (name alone is enough) |
+| `payment.transfer` | benign amount | — | human_approval | 0 | **human_approval** |
+| `web.search` | benign query | poisoned ("ignore all instructions...") | allow | 2 | **block** (response content, not the tool name) |
+
+That fourth row is the point of checking both independently: a permitted tool with a compromised response still gets caught.
+
+### A new decision: HUMAN_APPROVAL
+
+Added specifically for tool authorization — some actions shouldn't be fully automated OR fully blocked. Ordered between BLOCK and SANITIZE (less final than an outright block, more cautious than auto-proceeding). **v0.1 only returns this decision; nothing implements collecting an actual approval.** The calling application is responsible for building a real human-in-the-loop mechanism when it sees this decision — same honesty boundary as SANITIZE, which has existed since Day 8-9 and still doesn't execute anything either.
+
+### Known limitations
+
+- **The tool-argument detector runs on all text, not just tool arguments** (it's a normally-registered detector, same as every other one) — meaning a chat message that innocently mentions "DROP TABLE" or asks how `rm -rf` works will also produce a low/medium finding. Documented, not hidden: this is the same class of false-positive risk already accepted for PII/secrets.
+- **No blanket policy.yaml rules for these categories, deliberately.** Unlike prompt_injection/PII/secrets, the severity gradient here does real work (a bare `..` is a much weaker signal than `rm -rf /`), so the risk-score threshold — which respects per-finding severity — drives the response instead of a category-level override.
+- **Origin still doesn't affect scoring or policy** (same gap noted for RAG in Day-12 docs) — a `tool_arguments`/`tool_response` finding scores identically to the same finding type in plain `input`, even though a dangerous pattern in an argument about to execute is a materially different risk than the same text in a chat question. This is the second concrete case this gap has shown up in, which is exactly why it's tracked as real future work, not a one-off.
+- **No intent alignment.** Comparing what the user actually asked for against what the agent is about to do (e.g. "check my balance" → agent tries to transfer money) needs semantic understanding, not regex — considered early, explicitly out of scope for a v1 rules-based gateway.
+- **No tool chaining, step limits, or session tracking.** Each tool call is checked independently; nothing tracks a sequence of calls across one agent run.
+- **`tool_policy.yaml` ships as an illustrative example**, not a real security posture — every real deployment needs its own list based on what its agent can actually do.
 
 ## Implemented: Docker + Dependency Scanning
 

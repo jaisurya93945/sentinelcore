@@ -1,0 +1,20 @@
+# Tool authorization policy -- deterministic, outside the model's control.
+# "default" applies to any tool name not explicitly listed below.
+#
+# This is an illustrative example, not a real security posture for any
+# specific deployment -- every real integration needs its own list based
+# on what its agent can actually do. Ship this unedited and you get a
+# reasonable default stance, not a correct one for your application.
+
+default: warn
+
+tools:
+  web.search: allow
+  database.read: allow
+  file.read: warn
+  email.send: warn
+  database.write: warn
+  database.delete: block
+  file.delete: block
+  shell.execute: block
+  payment.transfer: human_approval

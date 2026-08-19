@@ -25,6 +25,7 @@ class Decision(str, Enum):
     ALLOW = "allow"
     WARN = "warn"
     SANITIZE = "sanitize"
+    HUMAN_APPROVAL = "human_approval"
     BLOCK = "block"
 
 
@@ -47,8 +48,9 @@ class Finding(BaseModel):
         default="input",
         description=(
             "Where this finding was found: 'input' for the main text, "
-            "'context:<index>' for the Nth retrieved/RAG document, or "
-            "'output' for the LLM's response"
+            "'context:<index>' for the Nth retrieved/RAG document, "
+            "'output' for the LLM's response, or 'tool_arguments'/"
+            "'tool_response' for agent tool-call scanning"
         ),
     )
     evidence: dict[str, Any] = Field(default_factory=dict)
@@ -94,4 +96,37 @@ class ScanRequest(BaseModel):
             "downstream system -- e.g. PII or secret leakage. Findings are "
             "tagged origin='output'. Optional; omit for input-only scanning."
         ),
+    )
+
+
+class ToolCallRequest(BaseModel):
+    """Request body for POST /api/v1/scan/tool-call."""
+
+    tool_name: str
+    arguments: dict[str, Any] = Field(default_factory=dict)
+    response: str | None = Field(
+        default=None,
+        description=(
+            "The tool's response, if it has already been executed. Scanned as "
+            "untrusted input -- exactly the same principle as retrieved_documents "
+            "on /api/v1/scan: a tool response is not automatically trustworthy "
+            "just because your own agent called the tool."
+        ),
+    )
+
+
+class ToolCallResult(BaseModel):
+    """Response body for POST /api/v1/scan/tool-call."""
+
+    scan_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    tool_name: str
+    tool_authorization: Decision = Field(
+        description="Deterministic allow/warn/sanitize/human_approval/block lookup by tool name -- independent of content scanning."
+    )
+    findings: list[Finding] = Field(default_factory=list)
+    risk_score: int = 0
+    decision: Decision = Field(
+        default=Decision.ALLOW,
+        description="The more severe of tool_authorization and the content-scanning decision.",
     )

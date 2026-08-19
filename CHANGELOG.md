@@ -11,6 +11,7 @@ Every entry here corresponds to a real, tested commit — see `git log` for the 
 - Audit logging — every decision from `/api/v1/scan` and both proxy stages persisted to SQLite, queryable via `GET /api/v1/audit/recent`. Metadata only (scan_id, timestamp, endpoint, risk score, decision, finding types/severities) — deliberately never raw text or finding evidence, since a "redacted" preview built from detectors with known gaps would be a false guarantee, not real safety.
 - Docker — multi-stage `Dockerfile`, non-root user, `docker-compose.yml` with a persistent audit-DB volume. Not build-tested in this project's dev environment (no Docker available there) — flagged explicitly in the file itself, not glossed over.
 - Dependency scanning — `pip-audit` added as a real, blocking CI job against both `requirements.txt` and `requirements-dev.txt` (now split from a single mixed file, so the Docker image doesn't ship test tooling). Clean as of this writing.
+- Agent/tool-call inspection — `POST /api/v1/scan/tool-call` combines deterministic tool-name authorization (`tool_policy.yaml`: allow/warn/sanitize/human_approval/block) with content scanning of arguments and tool responses (untrusted input, same principle as RAG documents). New `HUMAN_APPROVAL` decision, specifically for actions that shouldn't be fully automated or fully blocked — v0.1 returns the decision, doesn't implement collecting the approval itself.
 
 ### Known gaps (documented, not hidden)
 - Streaming (`stream: true`) is explicitly rejected with a clear error, not silently mishandled
