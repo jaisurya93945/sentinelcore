@@ -130,3 +130,38 @@ class ToolCallResult(BaseModel):
         default=Decision.ALLOW,
         description="The more severe of tool_authorization and the content-scanning decision.",
     )
+
+
+class MCPToolDefinition(BaseModel):
+    """
+    One tool as it actually appears in a real MCP server's `tools/list`
+    response. Field names intentionally match the MCP wire format exactly
+    (camelCase inputSchema, not input_schema) -- the point is to accept
+    real MCP output directly, not a SentinelCore-specific reshaping of it.
+    """
+
+    name: str
+    description: str = ""
+    inputSchema: dict[str, Any] = Field(default_factory=dict)
+
+
+class MCPToolScanRequest(BaseModel):
+    """Request body for POST /api/v1/scan/mcp-tools -- same shape as a
+    real `tools/list` response, so it can be piped in directly."""
+
+    tools: list[MCPToolDefinition]
+
+
+class MCPToolResult(BaseModel):
+    name: str
+    findings: list[Finding] = Field(default_factory=list)
+    risk_score: int = 0
+    decision: Decision = Decision.ALLOW
+
+
+class MCPToolScanResult(BaseModel):
+    """Response body for POST /api/v1/scan/mcp-tools."""
+
+    scan_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    tools: list[MCPToolResult] = Field(default_factory=list)

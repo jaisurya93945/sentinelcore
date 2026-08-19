@@ -161,4 +161,28 @@ PATTERNS: list[PatternRule] = [
         severity=Severity.MEDIUM,
         description="Attempts a persistent role/behavior override",
     ),
+    # -- Added for MCP tool-poisoning coverage: real documented attacks embed
+    # these in tool/property descriptions, which are sent to the model as
+    # context exactly like any other instruction (see docs/threat-model/README.md).
+    PatternRule(
+        id="RM-008",
+        category="role_manipulation",
+        pattern=_p(r"<(IMPORTANT|SYSTEM|CRITICAL)>"),
+        severity=Severity.HIGH,
+        description="Fake authority/urgency tag often used to disguise injected instructions as legitimate system text",
+    ),
+    PatternRule(
+        id="IO-008",
+        category="instruction_override",
+        pattern=_p(r"\bbefore\s+(using|calling)\s+this\s+tool,?\s+(you\s+)?(must|should|need\s+to)\b"),
+        severity=Severity.HIGH,
+        description="Tool-poisoning phrasing: injects a hidden secondary instruction disguised as tool usage guidance",
+    ),
+    PatternRule(
+        id="IO-009",
+        category="instruction_override",
+        pattern=_p(r"\b(do\s+not|don't)\s+(tell|inform|mention\s+to)\s+the\s+user\b"),
+        severity=Severity.HIGH,
+        description="Secrecy-demanding phrasing -- asking the model to hide something from the user has no legitimate justification",
+    ),
 ]

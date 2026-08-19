@@ -46,6 +46,7 @@ flowchart TD
 | **Tool policy** | `app/services/tool_policy.py`, `tool_policy.yaml` | Deterministic allow/warn/sanitize/human_approval/block lookup by tool *name* — separate from the risk-scored content pipeline, since authorization isn't a severity calculation. |
 | **Tool argument detector** | `app/detectors/tool_arguments/` | SQL/shell-injection-shaped patterns and path traversal, applied to serialized tool arguments. A normal registered detector — also runs on ordinary input, same tradeoff as PII/secrets. |
 | **Tool-call endpoint** | `app/api/v1/tool_call.py` | `POST /api/v1/scan/tool-call` — combines tool-name authorization with content scanning of the arguments *and*, if provided, the tool's response (untrusted input, same principle as RAG documents). Final decision is the more severe of the two, arrived at independently. |
+| **MCP tool scanning** | `app/api/v1/mcp.py` | `POST /api/v1/scan/mcp-tools` — accepts real MCP `tools/list` shape directly. Recursively scans every `description` field (top-level and per-property in `inputSchema`) for tool poisoning, reusing the same detector registry — no new detection logic, just a new place to look. |
 
 ## Why detectors are separate from risk/policy
 
@@ -63,4 +64,4 @@ These live outside `app/` deliberately — they're development-time tooling the 
 
 ## What's not in this diagram yet
 
-MCP security is designed but not implemented. Tool-call inspection *is* implemented (`POST /api/v1/scan/tool-call`) but isn't drawn above — it's a genuinely separate flow (tool-name lookup + content scan, not text-in/text-out), described in the component table instead of forced into a diagram built around the scan/proxy request shape. See the Current Status table in the main README for exactly what's done vs planned.
+Everything implemented so far is described above or in the component table — tool-call and MCP scanning are genuinely separate flows (lookup/recursive-scan, not text-in/text-out) and are described there rather than forced into a diagram built around the scan/proxy request shape. See the Current Status table in the main README for what's still not built (streaming, sanitize execution, conflicting-instruction detection, and more).

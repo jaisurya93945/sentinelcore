@@ -40,11 +40,12 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Docker (multi-stage, non-root) | Done — not build-tested here, see caveat in `Dockerfile` |
 | Dependency scanning (`pip-audit`, blocking CI gate) | Done — clean as of this writing |
 | Agent/tool-call inspection (`/api/v1/scan/tool-call`) | Done — deterministic tool authorization + content scanning |
+| MCP tool discovery scanning (`/api/v1/scan/mcp-tools`) | Done — recursive tool-poisoning detection, verified against the real MCP spec |
 | Streaming proxy support | Not started |
-| MCP security | Not started |
 | Dashboard | Not started |
+| Enterprise / multi-tenant scale | Not started |
 
-**Tool calls now get checked two independent ways.** Tool *name* authorization (allow/warn/sanitize/human_approval/block, configurable per tool) is a deterministic lookup, never a risk score — "is this agent allowed to call `payment.transfer`" doesn't get more true by combining severities. Tool *arguments and responses* get scanned through the same detector pipeline as everything else, with tool responses treated as untrusted input, same principle as RAG documents. Live-verified across 4 scenarios, including the one that actually matters: a permitted tool whose response was poisoned still gets blocked. Full reasoning and honest limits (origin still doesn't weight policy, no intent alignment, no tool chaining) in `docs/threat-model/README.md`.
+**Every implemented layer now has real, independently-verified coverage — input, RAG context, output, tool calls, and MCP tool discovery all run through the same detector pipeline.** The MCP work specifically: I checked the actual current MCP spec (tool descriptions are sent to the model as context, confirmed via search, not assumed) before building, added 3 new patterns for the specific phrasing real tool-poisoning attacks use, then re-ran the full 744-example benchmark to check impact — 1 attack newly caught, 0 regressions, 0 new false positives. Full writeup in `docs/threat-model/README.md` and `docs/research/README.md`.
 
 ## Quickstart
 

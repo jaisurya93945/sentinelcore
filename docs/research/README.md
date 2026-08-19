@@ -117,3 +117,16 @@ Notably, the two prompt-injection fixes generalized beyond the exact sentences t
 
 One catch worth flagging honestly rather than quietly counting as a clean win: `deepset-train-0317` was caught by `character_spacing_evasion`, but not via real newlines -- via the *literal two-character text* `\n` repeated as visual padding (tokenizes as alternating single-char `\` and `n` tokens). Structurally similar to the technique the check was built for, but not identical to it -- flagged here so the "19 newly caught" number isn't read as 19 identical confirmations of the same fix.
 
+## v0.3: patterns added for MCP tool-poisoning coverage
+
+Three new prompt_injection patterns (fake authority tags, hidden secondary instructions, secrecy demands — full reasoning in `docs/threat-model/README.md`) were added while building MCP tool scanning, not primarily to move this benchmark. Re-running it anyway, as always:
+
+| Metric | v0.2 | v0.3 | Delta |
+|---|---|---|---|
+| Precision | 96.77% | 96.83% | +0.06% |
+| Recall | 17.39% | 17.68% | +0.29% |
+| F1 | 29.48% | 29.90% | +0.42% |
+| FPR | 0.50% | 0.50% | +0.00% |
+
+1 attack newly caught (`deepset-test-0000`), 0 regressions, 0 new false positives. Small, because these patterns were built for a specific, different attack shape (tool descriptions), not tuned against this dataset — the real point of building them wasn't this number, and it would be dishonest to imply otherwise.
+

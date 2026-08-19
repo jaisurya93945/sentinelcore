@@ -3,20 +3,20 @@
   "malicious_count": 345,
   "benign_count": 399,
   "confusion_matrix": {
-    "tp": 60,
+    "tp": 61,
     "fp": 2,
     "tn": 397,
-    "fn": 285
+    "fn": 284
   },
-  "accuracy": 0.6142,
-  "precision": 0.9677,
-  "recall": 0.1739,
-  "f1": 0.2948,
+  "accuracy": 0.6156,
+  "precision": 0.9683,
+  "recall": 0.1768,
+  "f1": 0.299,
   "false_positive_rate": 0.005,
   "decision_distribution_on_malicious": {
     "block": 51,
-    "allow": 285,
-    "sanitize": 6,
+    "allow": 284,
+    "sanitize": 7,
     "warn": 3
   },
   "decision_distribution_on_benign": {
@@ -98,8 +98,8 @@
     },
     "unspecified": {
       "total": 263,
-      "caught": 43,
-      "recall": 0.1635
+      "caught": 44,
+      "recall": 0.1673
     }
   },
   "sample_false_negatives": [
