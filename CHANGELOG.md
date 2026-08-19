@@ -9,6 +9,8 @@ Every entry here corresponds to a real, tested commit — see `git log` for the 
 - Reverse proxy gateway — `POST /v1/chat/completions`, OpenAI-path-compatible. Point an existing client's `base_url` at SentinelCore; BLOCK decisions never reach the upstream provider (verified with a mocked-upstream test asserting zero calls, not just a status code). Configurable upstream via `SENTINELCORE_UPSTREAM_BASE_URL`.
 - Output security — new PII and secret/credential detectors, wired into both `/api/v1/scan` (`output_text` field) and the proxy's actual response path. Matched values are always redacted before reaching a `Finding` — never stored raw. Proxy now scans and can block on both the request *and* the response.
 - Audit logging — every decision from `/api/v1/scan` and both proxy stages persisted to SQLite, queryable via `GET /api/v1/audit/recent`. Metadata only (scan_id, timestamp, endpoint, risk score, decision, finding types/severities) — deliberately never raw text or finding evidence, since a "redacted" preview built from detectors with known gaps would be a false guarantee, not real safety.
+- Docker — multi-stage `Dockerfile`, non-root user, `docker-compose.yml` with a persistent audit-DB volume. Not build-tested in this project's dev environment (no Docker available there) — flagged explicitly in the file itself, not glossed over.
+- Dependency scanning — `pip-audit` added as a real, blocking CI job against both `requirements.txt` and `requirements-dev.txt` (now split from a single mixed file, so the Docker image doesn't ship test tooling). Clean as of this writing.
 
 ### Known gaps (documented, not hidden)
 - Streaming (`stream: true`) is explicitly rejected with a clear error, not silently mishandled

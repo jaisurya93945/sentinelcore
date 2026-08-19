@@ -57,6 +57,23 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 See the Current Status table in `README.md` for the full list (agent/tool misuse, conflicting-instruction detection, source trust/provenance tracking, streaming proxy support, sanitize execution).
 
+## Implemented: Docker + Dependency Scanning
+
+**Files:** `Dockerfile`, `docker-compose.yml`, `.dockerignore`; `.github/workflows/ci.yml` (`dependency-scan` job)
+
+### Docker
+
+Multi-stage build, non-root user, persists the audit DB via a named volume through `docker compose`. **Not build-tested in this project's own development environment** — there's no Docker available in the sandbox this was built in, and Docker registry domains aren't reachable from it either. The Dockerfile follows standard practice (multi-stage, minimal runtime image, non-root user, healthcheck), but "written correctly" and "verified to build and run" are different claims — the file itself says so at the top. Build and test it yourself before relying on it anywhere real.
+
+### Dependency scanning
+
+`pip-audit` runs against both `requirements.txt` and `requirements-dev.txt` on every push/PR as a real, blocking CI job — it fails the build on a known vulnerability, not just reports one. Verified clean as of this writing (`pip-audit -r requirements.txt`: no known vulnerabilities) — that's a snapshot, not a permanent guarantee; new CVEs get disclosed against existing packages all the time, which is exactly why this now runs on every push instead of being checked once.
+
+### Known limitations
+
+- **Docker:** no build test, no published image, no multi-arch consideration, no image-size optimization beyond the basic multi-stage split.
+- **Dependency scanning covers Python packages only.** No container image scanning (e.g. Trivy/Grype for OS-level packages in the built image), no SBOM generation, no signature verification. The "AI Supply Chain" security phase from the broader project vision is much wider than this — this is the one small, real, achievable slice of it.
+
 ## Implemented: Audit Logging
 
 **Module:** `app/services/audit_log.py`, queryable via `GET /api/v1/audit/recent`

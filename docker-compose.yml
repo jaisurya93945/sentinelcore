@@ -1,0 +1,25 @@
+# Local dev/testing only -- not a production deployment manifest.
+# Not build-tested here (no Docker in this project's dev sandbox); see the
+# note at the top of Dockerfile.
+
+services:
+  sentinelcore:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SENTINELCORE_UPSTREAM_BASE_URL: ${SENTINELCORE_UPSTREAM_BASE_URL:-https://api.openai.com}
+      SENTINELCORE_ENVIRONMENT: development
+    volumes:
+      # Persist the audit trail across container restarts -- without this,
+      # SENTINELCORE_AUDIT_DB_PATH (set in the Dockerfile to /data/...)
+      # would be wiped every time the container is recreated.
+      - audit_data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  audit_data:
