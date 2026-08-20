@@ -6,22 +6,22 @@ instead of directly at your LLM provider -- requests are scanned before
 being forwarded, AND the response is scanned before being returned. A
 BLOCK decision on either side means the caller never sees the content.
 
-Streaming (stream=true) is explicitly not supported yet -- rejected with
-a clear error rather than silently mishandled. See docs/threat-model/README.md
-for this and every other documented limitation of the proxy.
+Streaming (stream=true) IS supported, with real, honest tradeoffs -- see
+_stream_and_scan below and docs/threat-model/README.md for what it does
+and doesn't guarantee.
 """
 
 import json
 import uuid
 
 from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.detectors.registry import get_registered_detectors
 from app.models.finding import Decision, Finding
 from app.services.audit_log import log_scan_event
 from app.services.policy_engine import decide
-from app.services.proxy import forward_to_upstream
+from app.services.proxy import forward_to_upstream, stream_lines_from_upstream
 from app.services.risk_engine import calculate_risk_score
 
 router = APIRouter()
@@ -102,6 +102,69 @@ def _blocked_response(findings: list[Finding], risk_score: int, decision: Decisi
     )
 
 
+async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
+    """
+    Streams the upstream's SSE response through to the client while
+    re-scanning the accumulated text after every chunk. If a BLOCK is
+    reached, stops forwarding further content and emits a synthetic
+    finish_reason='content_filter' chunk -- the same field real OpenAI-
+    compatible clients already understand for filtered content, not a
+    SentinelCore-specific shape they'd need special handling for.
+
+    Two tradeoffs, real and worth stating precisely rather than vaguely:
+    - The specific chunk whose content triggers a BLOCK is suppressed --
+      verified by test and by a live run, not assumed: it never reaches
+      the client. What *can* still leak is a trigger pattern split
+      across a chunk boundary (e.g. "AKIA" in one chunk, the rest of an
+      AWS key in the next) -- the first chunk alone doesn't match
+      anything, so it goes out before the second chunk completes the
+      pattern and gets caught. Scanning faster doesn't fix this; it's a
+      property of chunk boundaries not aligning with detector patterns.
+    - Re-scanning the full accumulated text on every chunk is simple and
+      maximally responsive, but O(n) per chunk -- O(n^2) total over a
+      very long completion. Fine for typical response lengths; a real
+      scaling concern for unusually long streams. An incremental
+      re-scan (new content + a small overlap window) would fix this and
+      isn't implemented in v1.
+    """
+    accumulated_text = ""
+    last_findings: list[Finding] = []
+    last_risk_score = 0
+    last_decision = Decision.ALLOW
+
+    async for line in stream_lines_from_upstream(
+        path="/v1/chat/completions", method="POST", headers=headers, body=raw_body
+    ):
+        if not line.startswith("data: "):
+            continue
+        data_str = line[len("data: ") :]
+
+        if data_str.strip() == "[DONE]":
+            yield "data: [DONE]\n\n"
+            break
+
+        try:
+            chunk = json.loads(data_str)
+            delta_content = chunk["choices"][0]["delta"].get("content", "")
+        except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+            delta_content = ""
+
+        if delta_content:
+            accumulated_text += delta_content
+            last_findings = _scan_text(accumulated_text, origin="output")
+            last_risk_score = calculate_risk_score(last_findings)
+            last_decision = decide(last_findings, last_risk_score)
+
+            if last_decision == Decision.BLOCK:
+                yield 'data: {"choices":[{"delta":{},"finish_reason":"content_filter","index":0}]}\n\n'
+                yield "data: [DONE]\n\n"
+                break
+
+        yield f"data: {data_str}\n\n"
+
+    log_scan_event(scan_id, "proxy_output_stream", last_risk_score, last_decision.value, last_findings)
+
+
 @router.post("/chat/completions")
 async def chat_completions(request: Request):
     raw_body = await request.body()
@@ -112,20 +175,6 @@ async def chat_completions(request: Request):
         return JSONResponse(
             status_code=400,
             content={"error": {"message": "Invalid JSON body.", "type": "sentinelcore_invalid_request"}},
-        )
-
-    if body.get("stream"):
-        return JSONResponse(
-            status_code=501,
-            content={
-                "error": {
-                    "message": (
-                        "SentinelCore does not proxy streaming responses yet (v0.1). "
-                        "Set stream=false, or scan content yourself via /api/v1/scan before streaming."
-                    ),
-                    "type": "sentinelcore_not_implemented",
-                }
-            },
         )
 
     messages = body.get("messages")
@@ -142,6 +191,16 @@ async def chat_completions(request: Request):
 
     if input_decision == Decision.BLOCK:
         return _blocked_response(input_findings, input_risk_score, input_decision, stage="input")
+
+    if body.get("stream"):
+        return StreamingResponse(
+            _stream_and_scan(scan_id, raw_body, dict(request.headers)),
+            media_type="text/event-stream",
+            headers={
+                "X-SentinelCore-Input-Decision": input_decision.value,
+                "X-SentinelCore-Input-Risk-Score": str(input_risk_score),
+            },
+        )
 
     # ALLOW / WARN / SANITIZE on the input side -- sanitize execution isn't
     # implemented yet, so this currently behaves like allow-with-a-header.

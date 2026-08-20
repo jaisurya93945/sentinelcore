@@ -31,3 +31,19 @@ async def forward_to_upstream(path: str, method: str, headers: dict, body: bytes
 
     async with httpx.AsyncClient(timeout=settings.upstream_timeout_seconds) as client:
         return await client.request(method, upstream_url, headers=forward_headers, content=body)
+
+
+async def stream_lines_from_upstream(path: str, method: str, headers: dict, body: bytes):
+    """
+    Async generator yielding raw SSE lines from the upstream as they
+    arrive, instead of buffering the whole response first. This is what
+    lets the caller scan content incrementally and cut a stream off mid-
+    flight, rather than only being able to inspect it after the fact.
+    """
+    upstream_url = f"{settings.upstream_base_url.rstrip('/')}{path}"
+    forward_headers = {k: v for k, v in headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS}
+
+    async with httpx.AsyncClient(timeout=settings.upstream_timeout_seconds) as client:
+        async with client.stream(method, upstream_url, headers=forward_headers, content=body) as response:
+            async for line in response.aiter_lines():
+                yield line

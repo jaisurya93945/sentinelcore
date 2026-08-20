@@ -55,7 +55,24 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 ## Not yet implemented
 
-See the Current Status table in `README.md` for the full list (conflicting-instruction detection, source trust/provenance tracking, streaming proxy support, sanitize execution, origin-aware policy).
+See the Current Status table in `README.md` for the full list (conflicting-instruction detection, source trust/provenance tracking, sanitize execution, origin-aware policy, dashboard, enterprise/multi-tenant scale).
+
+## Implemented: Streaming Proxy Support
+
+**Modules:** `app/services/proxy.py` (`stream_lines_from_upstream`), `app/api/v1/proxy.py` (`_stream_and_scan`)
+
+Real streaming, not buffer-then-dump. `stream: true` requests get proxied through as Server-Sent Events, re-scanned incrementally as each chunk arrives, with the ability to cut a response off mid-stream. If the accumulated text crosses BLOCK, SentinelCore stops forwarding further content and emits a synthetic chunk with `finish_reason: "content_filter"` — the same field real OpenAI-compatible clients already understand for filtered content, not a proprietary shape they'd need special handling for.
+
+### What actually happens at the cutoff point, verified not assumed
+
+Ran an actual streaming response through the proxy where the second of three chunks contains an injection attempt. Observed result: the first (clean) chunk is delivered, the violating chunk's own content is **never sent** — the client receives the clean prefix, then the `content_filter` chunk, then `[DONE]`. The third chunk (which would have continued after the violation) is never forwarded at all. See `tests/unit/test_proxy.py::test_malicious_content_mid_stream_gets_cut_off` for the automated version of this same check.
+
+### Known limitations, stated precisely rather than vaguely
+
+- **A trigger pattern split across a chunk boundary can partially leak.** If part of a detectable pattern (e.g. `AKIA` from an AWS key) arrives in one chunk and the rest in the next, the first chunk doesn't match anything on its own and gets sent before the second chunk completes the pattern and triggers the block. This isn't fixable by scanning faster — it's a property of chunk boundaries not aligning with what a detector needs to see. Real, worth naming precisely, not "some tokens might leak."
+- **Re-scanning the full accumulated text on every chunk is O(n) per chunk, O(n^2) total** over a long stream. Fine for ordinary response lengths, a real scaling concern for unusually long ones. An incremental re-scan (new content plus a small overlap window, not implemented here) would fix this.
+- **Only the output side streams.** The input request is still scanned as a single buffered body before the streaming connection even opens — unchanged from the non-streaming path, and there was never a reason to stream a request body here in the first place.
+- **Not tested against a real LLM provider's actual streaming behavior** — same caveat as the rest of the proxy. The SSE parsing follows the documented OpenAI chunk format and was verified against a realistic mocked stream, not a live one.
 
 ## Implemented: MCP Tool Discovery Scanning
 

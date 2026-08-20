@@ -41,11 +41,11 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Dependency scanning (`pip-audit`, blocking CI gate) | Done — clean as of this writing |
 | Agent/tool-call inspection (`/api/v1/scan/tool-call`) | Done — deterministic tool authorization + content scanning |
 | MCP tool discovery scanning (`/api/v1/scan/mcp-tools`) | Done — recursive tool-poisoning detection, verified against the real MCP spec |
-| Streaming proxy support | Not started |
+| Streaming proxy support | Done — incremental scan-as-you-go, mid-stream cutoff via `content_filter` |
 | Dashboard | Not started |
 | Enterprise / multi-tenant scale | Not started |
 
-**Every implemented layer now has real, independently-verified coverage — input, RAG context, output, tool calls, and MCP tool discovery all run through the same detector pipeline.** The MCP work specifically: I checked the actual current MCP spec (tool descriptions are sent to the model as context, confirmed via search, not assumed) before building, added 3 new patterns for the specific phrasing real tool-poisoning attacks use, then re-ran the full 744-example benchmark to check impact — 1 attack newly caught, 0 regressions, 0 new false positives. Full writeup in `docs/threat-model/README.md` and `docs/research/README.md`.
+**The proxy now streams for real** — not buffer-the-whole-response-then-dump-it, which would defeat the entire point of streaming. Each chunk is scanned as it arrives; a violation partway through cuts the stream off with a `finish_reason: "content_filter"` signal real OpenAI-compatible clients already understand. Verified live, not just asserted: a 3-chunk stream with an injection attempt in chunk 2 delivers chunk 1 cleanly, suppresses chunk 2's own content entirely, and never sends chunk 3. One real, precisely-stated limitation: a detectable pattern split exactly across a chunk boundary (part of a secret in one chunk, the rest in the next) can partially leak before the second chunk completes the pattern — not fixable by scanning faster, a property of chunk boundaries not aligning with what a detector needs to see. Full writeup in `docs/threat-model/README.md`.
 
 ## Quickstart
 
