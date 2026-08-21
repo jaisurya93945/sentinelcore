@@ -62,5 +62,5 @@ def scan_tool_call(payload: ToolCallRequest) -> ToolCallResult:
         risk_score=risk_score,
         decision=final_decision,
     )
-    log_scan_event(result.scan_id, "tool_call", risk_score, final_decision.value, findings)
+    log_scan_event(result.scan_id, "tool_call", risk_score, final_decision.value, findings, detail=payload.tool_name)
     return result

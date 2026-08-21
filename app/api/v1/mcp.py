@@ -74,6 +74,6 @@ def scan_mcp_tools(payload: MCPToolScanRequest) -> MCPToolScanResult:
         decision = decide(findings, risk_score)
 
         result.tools.append(MCPToolResult(name=tool.name, findings=findings, risk_score=risk_score, decision=decision))
-        log_scan_event(result.scan_id, "mcp_tools", risk_score, decision.value, findings)
+        log_scan_event(result.scan_id, "mcp_tools", risk_score, decision.value, findings, detail=tool.name)
 
     return result

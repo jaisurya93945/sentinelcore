@@ -2,9 +2,11 @@
 Audit logging.
 
 Persists scan/decision METADATA only -- scan_id, timestamp, endpoint,
-risk_score, decision, and a findings summary (type/severity/origin/detector).
-It never persists raw input/output text, and never persists finding
-`evidence` (which can contain matched-text fragments).
+risk_score, decision, an optional `detail` (a controlled identifier like
+a tool name -- never arbitrary user text), and a findings summary
+(type/severity/origin/detector). It never persists raw input/output
+text, and never persists finding `evidence` (which can contain
+matched-text fragments).
 
 This is a deliberate v1 boundary, not an oversight. The tempting
 alternative -- store a "redacted" text preview using the same regex
@@ -19,6 +21,11 @@ v1 low-throughput baseline, not tuned for real concurrent load (a real
 async driver or connection pooling would be needed for that). Logging
 failures are always swallowed, never raised: a broken audit log must
 never break an actual scan or proxy response.
+
+No schema migration support: `CREATE TABLE IF NOT EXISTS` does nothing
+to an already-existing table, so adding a column here requires a fresh
+database file. Accepted for v0.1 pre-release software with no real
+deployments yet -- stated plainly rather than silently glossed over.
 """
 
 import json
@@ -38,6 +45,7 @@ CREATE TABLE IF NOT EXISTS scan_events (
     scan_id TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     endpoint TEXT NOT NULL,
+    detail TEXT,
     risk_score INTEGER NOT NULL,
     decision TEXT NOT NULL,
     finding_count INTEGER NOT NULL,
@@ -66,7 +74,14 @@ def init_db() -> None:
         logger.warning(f"Audit DB init failed, audit logging will be a no-op: {e}")
 
 
-def log_scan_event(scan_id: str, endpoint: str, risk_score: int, decision: str, findings: list[Finding]) -> None:
+def log_scan_event(
+    scan_id: str,
+    endpoint: str,
+    risk_score: int,
+    decision: str,
+    findings: list[Finding],
+    detail: str | None = None,
+) -> None:
     if not settings.audit_enabled:
         return
     try:
@@ -77,12 +92,13 @@ def log_scan_event(scan_id: str, endpoint: str, risk_score: int, decision: str, 
         with _connect() as conn:
             conn.execute(
                 "INSERT INTO scan_events "
-                "(scan_id, timestamp, endpoint, risk_score, decision, finding_count, findings_summary) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "(scan_id, timestamp, endpoint, detail, risk_score, decision, finding_count, findings_summary) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     scan_id,
                     datetime.now(timezone.utc).isoformat(),
                     endpoint,
+                    detail,
                     risk_score,
                     decision,
                     len(findings),
@@ -101,7 +117,7 @@ def get_recent_events(limit: int = 50) -> list[dict]:
         with _connect() as conn:
             conn.row_factory = sqlite3.Row
             rows = conn.execute(
-                "SELECT scan_id, timestamp, endpoint, risk_score, decision, finding_count, findings_summary "
+                "SELECT scan_id, timestamp, endpoint, detail, risk_score, decision, finding_count, findings_summary "
                 "FROM scan_events ORDER BY id DESC LIMIT ?",
                 (limit,),
             ).fetchall()
@@ -110,6 +126,7 @@ def get_recent_events(limit: int = 50) -> list[dict]:
                     "scan_id": r["scan_id"],
                     "timestamp": r["timestamp"],
                     "endpoint": r["endpoint"],
+                    "detail": r["detail"],
                     "risk_score": r["risk_score"],
                     "decision": r["decision"],
                     "finding_count": r["finding_count"],

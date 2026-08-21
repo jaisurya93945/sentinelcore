@@ -18,7 +18,7 @@ Modern AI apps expose models to untrusted user input, external documents, tools,
 
 We never fabricate accuracy, precision, recall, F1, latency, or detection-rate numbers. Every claim in this repo reflects what is actually implemented and tested — not the long-term vision. Planned and experimental capabilities are always labeled as such.
 
-## Current Status — v0.1.0-dev (Day 1-18+)
+## Current Status — v0.1.0-dev
 
 | Component | Status |
 |---|---|
@@ -42,10 +42,12 @@ We never fabricate accuracy, precision, recall, F1, latency, or detection-rate n
 | Agent/tool-call inspection (`/api/v1/scan/tool-call`) | Done — deterministic tool authorization + content scanning |
 | MCP tool discovery scanning (`/api/v1/scan/mcp-tools`) | Done — recursive tool-poisoning detection, verified against the real MCP spec |
 | Streaming proxy support | Done — incremental scan-as-you-go, mid-stream cutoff via `content_filter` |
-| Dashboard | Not started |
+| Dashboard (`GET /dashboard`) | Done — read-only, polls the audit trail, screenshot-verified |
 | Enterprise / multi-tenant scale | Not started |
 
-**The proxy now streams for real** — not buffer-the-whole-response-then-dump-it, which would defeat the entire point of streaming. Each chunk is scanned as it arrives; a violation partway through cuts the stream off with a `finish_reason: "content_filter"` signal real OpenAI-compatible clients already understand. Verified live, not just asserted: a 3-chunk stream with an injection attempt in chunk 2 delivers chunk 1 cleanly, suppresses chunk 2's own content entirely, and never sends chunk 3. One real, precisely-stated limitation: a detectable pattern split exactly across a chunk boundary (part of a secret in one chunk, the rest in the next) can partially leak before the second chunk completes the pattern — not fixable by scanning faster, a property of chunk boundaries not aligning with what a detector needs to see. Full writeup in `docs/threat-model/README.md`.
+**The proxy now streams for real** — not buffer-the-whole-response-then-dump-it, which would defeat the entire point of streaming. Each chunk is scanned as it arrives; a violation partway through cuts the stream off with a `finish_reason: "content_filter"` signal real OpenAI-compatible clients already understand. Verified live, not just asserted: a 3-chunk stream with an injection attempt in chunk 2 delivers chunk 1 cleanly, suppresses chunk 2's own content entirely, and never sends chunk 3. One real, precisely-stated limitation: a detectable pattern split exactly across a chunk boundary (part of a secret in one chunk, the rest in the next) can partially leak before the second chunk completes the pattern — not fixable by scanning faster, a property of chunk boundaries not aligning with what a detector needs to see.
+
+**The dashboard was actually screenshotted against live data before shipping, not just reviewed as source.** That caught two real problems no amount of reading the code would have: a risk indicator too thin to read, and tool-call/MCP entries with no indication of *which tool* was involved. Both fixed because of what the screenshot showed, not in spite of skipping that step. Full writeup for both in `docs/threat-model/README.md`.
 
 ## Quickstart
 

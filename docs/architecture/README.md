@@ -47,6 +47,7 @@ flowchart TD
 | **Tool argument detector** | `app/detectors/tool_arguments/` | SQL/shell-injection-shaped patterns and path traversal, applied to serialized tool arguments. A normal registered detector — also runs on ordinary input, same tradeoff as PII/secrets. |
 | **Tool-call endpoint** | `app/api/v1/tool_call.py` | `POST /api/v1/scan/tool-call` — combines tool-name authorization with content scanning of the arguments *and*, if provided, the tool's response (untrusted input, same principle as RAG documents). Final decision is the more severe of the two, arrived at independently. |
 | **MCP tool scanning** | `app/api/v1/mcp.py` | `POST /api/v1/scan/mcp-tools` — accepts real MCP `tools/list` shape directly. Recursively scans every `description` field (top-level and per-property in `inputSchema`) for tool poisoning, reusing the same detector registry — no new detection logic, just a new place to look. |
+| **Dashboard** | `app/static/dashboard.html`, `app/api/v1/dashboard.py` | `GET /dashboard` — a single static page, no build pipeline, polling `GET /api/v1/audit/recent` every 5s. Inherits that endpoint's no-raw-text guarantee automatically, since it never reads anything else. |
 
 ## Why detectors are separate from risk/policy
 

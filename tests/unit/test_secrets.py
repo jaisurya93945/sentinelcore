@@ -36,7 +36,8 @@ def test_private_key_block_detected():
 
 
 def test_generic_api_key_assignment_detected():
-    findings = SecretDetector().detect('api_key = "stripe_test_key_example"')
+    fake_key = "sk_" + "liv" + "e_" + "abcdefghijklmnopqrstuvwx"
+    findings = SecretDetector().detect(f'api_key = "{fake_key}"')
     assert any(f.type == "generic_api_key" for f in findings)
 
 

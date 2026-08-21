@@ -49,3 +49,17 @@ def test_disabled_audit_is_a_no_op(monkeypatch):
     monkeypatch.setattr(settings, "audit_enabled", False)
     log_scan_event("scan-disabled", "scan", 0, "allow", [])
     assert get_recent_events(limit=100) == []
+
+
+def test_detail_field_stored_and_retrieved():
+    log_scan_event("scan-detail", "tool_call", 0, "block", [], detail="database.delete")
+    events = get_recent_events(limit=10)
+    event = next(e for e in events if e["scan_id"] == "scan-detail")
+    assert event["detail"] == "database.delete"
+
+
+def test_detail_defaults_to_none():
+    log_scan_event("scan-nodetail", "scan", 0, "allow", [])
+    events = get_recent_events(limit=10)
+    event = next(e for e in events if e["scan_id"] == "scan-nodetail")
+    assert event["detail"] is None

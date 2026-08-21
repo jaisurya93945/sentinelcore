@@ -55,7 +55,29 @@ This is the actual argument for a layered gateway instead of one clever detector
 
 ## Not yet implemented
 
-See the Current Status table in `README.md` for the full list (conflicting-instruction detection, source trust/provenance tracking, sanitize execution, origin-aware policy, dashboard, enterprise/multi-tenant scale).
+See the Current Status table in `README.md` for the full list (conflicting-instruction detection, source trust/provenance tracking, sanitize execution, origin-aware policy, enterprise/multi-tenant scale).
+
+## Implemented: Dashboard
+
+**Files:** `app/static/dashboard.html`, `app/api/v1/dashboard.py` (`GET /dashboard`)
+
+A single static HTML page, no build pipeline, no new dependency — polls `GET /api/v1/audit/recent` every 5 seconds and renders it as a flight-recorder-style timeline. This is deliberately not a SOC dashboard: no alerts, no SIEM integration, no filtering or search, no auth. It's a genuine, honest v1 slice — a real read-only window into the same audit trail described above — not a thin version of something much bigger pretending to be complete.
+
+Because it only ever reads from `/api/v1/audit/recent`, it inherits that endpoint's guarantees automatically: no raw text, no finding evidence, ever displayed, by construction rather than by extra care in the page itself.
+
+### Built and verified the same way as everything else in this repo
+
+Screenshotted the actual rendered page against live seeded data (not just reviewed the source) before shipping it, and caught two real problems that way rather than by inspection:
+
+1. **The risk indicator was a 4px-tall bar, technically correct but functionally illegible** at the size it rendered — replaced with a colored chip after seeing it small and unreadable in the screenshot, not from theorizing about it.
+2. **Tool-call and MCP entries showed "no findings" with no indication of which tool was involved**, which is uninformative for exactly the rows a security reviewer would most want detail on — a permitted-but-denied tool call has a real reason (the tool name itself), and the dashboard was hiding it. Added an optional `detail` field to the audit log (the tool/MCP-tool name — a controlled identifier, not arbitrary text, so it doesn't reopen the raw-content question) specifically because this testing surfaced the gap.
+
+### Known limitations
+
+- **No schema migration.** Adding the `detail` column means a pre-existing audit database needs to be recreated — stated plainly in `audit_log.py`'s own docstring, accepted because there are no real deployments yet to migrate.
+- **No auth on `/dashboard` or `/api/v1/audit/recent`.** Anyone who can reach the gateway can view the audit trail. Fine for local/trusted-network use, a real gap before exposing this publicly.
+- **Polling, not push.** A 5-second refresh interval, not a websocket — simple and sufficient for v1, not real-time.
+- **No historical range, filtering, search, or export.** Shows the most recent 30 events only.
 
 ## Implemented: Streaming Proxy Support
 
