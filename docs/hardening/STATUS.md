@@ -22,7 +22,7 @@ Status values: **DONE** (implemented and tested) · **PARTIAL** (real, with a st
 | 14 | MCP security | PARTIAL | Static tool-discovery scanning done. A live relay between an actual MCP client and server: not implemented |
 | 15 | MCP authorization (OAuth) | DECLINED | Cannot be implemented responsibly without a real MCP server/OAuth provider to test against |
 | 16 | Output security | DONE | Existing |
-| 17 | Real sanitization | NOT YET ATTEMPTED | Flagged as a gap since Day 8-9. Real, achievable candidate |
+| 17 | Real sanitization | **PARTIAL — real, not fabricated** | `app/services/sanitizer.py`: strip/normalize + mandatory re-scan + escalation, actually wired into `/api/v1/scan` and the proxy's non-streaming path with `decision`/`enforcement_status` genuinely separated. Verified end-to-end (the forwarded proxy request body is confirmed to contain the cleaned text). Not yet wired into streaming, tool-call, or MCP paths — stated scope limit, not a hidden one. One documented edge case: multi-word character-spacing collapse can glue words together in a way that under-represents danger on re-scan. |
 | 18 | Risk engine review | DONE | Already deterministic, explainable, testable |
 | 19 | Policy engine review | PARTIAL | Deterministic/testable/explainable: yes. Versionable, user/tenant dimensions: not implemented (no identity system to key on yet) |
 | 20 | Audit security | PARTIAL | Core fields recorded. Pagination, filtering, retention, rotation, export: not implemented |

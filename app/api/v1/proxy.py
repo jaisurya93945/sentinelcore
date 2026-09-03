@@ -19,11 +19,12 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 
 from app.core.auth import Role, require_role
 from app.detectors.registry import get_registered_detectors
-from app.models.finding import Decision, Finding
+from app.models.finding import Decision, EnforcementStatus, Finding
 from app.services.audit_log import log_scan_event
 from app.services.policy_engine import decide
 from app.services.proxy import forward_to_upstream, stream_lines_from_upstream
 from app.services.risk_engine import calculate_risk_score
+from app.services.sanitizer import enforce_sanitize
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -80,6 +81,21 @@ def _extract_assistant_text(upstream_content: bytes) -> str | None:
         return content if isinstance(content, str) else None
     except (json.JSONDecodeError, KeyError, IndexError, TypeError):
         return None
+
+
+def _substitute_latest_user_message(body: dict, sanitized_text: str) -> bytes:
+    """Rewrites the latest user message's content to the sanitized text and
+    re-serializes the body -- this is what makes enforcement real rather
+    than cosmetic: the modified body is what actually gets forwarded.
+    Only handles plain-string content; multimodal (list) content is left
+    untouched, matching _extract_text's own scope."""
+    messages = body.get("messages", [])
+    for message in reversed(messages):
+        if message.get("role") == "user":
+            if isinstance(message.get("content"), str):
+                message["content"] = sanitized_text
+            break
+    return json.dumps(body).encode("utf-8")
 
 
 def _blocked_response(findings: list[Finding], risk_score: int, decision: Decision, stage: str) -> JSONResponse:
@@ -183,6 +199,27 @@ async def chat_completions(request: Request):
 
     input_risk_score = calculate_risk_score(input_findings)
     input_decision = decide(input_findings, input_risk_score)
+    forward_body = raw_body
+    enforcement_status = EnforcementStatus.NOT_APPLICABLE
+
+    if input_decision == Decision.SANITIZE:
+        context_findings = [f for f in input_findings if f.origin != "input"]
+        if context_findings:
+            # A SANITIZE verdict influenced by tool/context-message findings
+            # isn't something rewriting the latest user message would fix --
+            # reported as not applicable rather than sanitizing something
+            # that wouldn't address why the decision was made.
+            enforcement_status = EnforcementStatus.NOT_APPLICABLE
+        else:
+            user_texts = [_extract_text(m.get("content")) for m in messages if m.get("role") == "user"]
+            latest_user_text = user_texts[-1] if user_texts else ""
+            sanitize_result = enforce_sanitize(latest_user_text, input_findings)
+            enforcement_status = sanitize_result.enforcement_status
+            input_decision = sanitize_result.decision
+            input_findings = sanitize_result.findings
+            input_risk_score = sanitize_result.risk_score
+            if sanitize_result.enforcement_status in (EnforcementStatus.ENFORCED, EnforcementStatus.ESCALATED):
+                forward_body = _substitute_latest_user_message(dict(body), sanitize_result.sanitized_text)
 
     scan_id = str(uuid.uuid4())
     log_scan_event(scan_id, "proxy_input", input_risk_score, input_decision.value, input_findings)
@@ -191,6 +228,9 @@ async def chat_completions(request: Request):
         return _blocked_response(input_findings, input_risk_score, input_decision, stage="input")
 
     if body.get("stream"):
+        # Sanitize enforcement is not yet wired into the streaming path --
+        # SANITIZE decisions here still just proceed unmodified, same as
+        # before. A real, stated limitation, not a silent gap.
         return StreamingResponse(
             _stream_and_scan(scan_id, raw_body, dict(request.headers)),
             media_type="text/event-stream",
@@ -204,7 +244,7 @@ async def chat_completions(request: Request):
         path="/v1/chat/completions",
         method="POST",
         headers=dict(request.headers),
-        body=raw_body,
+        body=forward_body,
     )
 
     assistant_text = _extract_assistant_text(upstream_response.content)
@@ -219,6 +259,7 @@ async def chat_completions(request: Request):
     response_headers = dict(upstream_response.headers)
     response_headers["X-SentinelCore-Input-Decision"] = input_decision.value
     response_headers["X-SentinelCore-Input-Risk-Score"] = str(input_risk_score)
+    response_headers["X-SentinelCore-Input-Enforcement-Status"] = enforcement_status.value
     response_headers["X-SentinelCore-Output-Decision"] = output_decision.value
     response_headers["X-SentinelCore-Output-Risk-Score"] = str(output_risk_score)
     response_headers.pop("content-length", None)

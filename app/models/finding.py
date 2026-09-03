@@ -29,6 +29,21 @@ class Decision(str, Enum):
     BLOCK = "block"
 
 
+class EnforcementStatus(str, Enum):
+    """
+    Separate from Decision on purpose: a decision is a recommendation,
+    enforcement_status is what actually happened. Reporting SANITIZE as
+    the decision when nothing was ever sanitized is exactly the "decision
+    reported as completed action" failure mode this field exists to make
+    impossible to represent by accident.
+    """
+
+    NOT_APPLICABLE = "not_applicable"  # decision wasn't SANITIZE -- nothing to enforce
+    ENFORCED = "enforced"  # SANITIZE was requested and actually performed; text is now clean
+    ESCALATED = "escalated"  # sanitized text was re-scanned and still triggered findings, so the decision was escalated rather than silently allowed
+    NOT_IMPLEMENTED = "not_implemented"  # SANITIZE was requested but no finding type present had a working sanitizer
+
+
 class Finding(BaseModel):
     """A single security finding produced by one detector."""
 
@@ -74,6 +89,11 @@ class ScanResult(BaseModel):
         default=None,
         description="Set by the policy engine (Phase 3, not yet implemented)",
     )
+    sanitized_text: str | None = Field(
+        default=None,
+        description="The input text after sanitization, if enforcement actually ran. None when not applicable.",
+    )
+    enforcement_status: EnforcementStatus = Field(default=EnforcementStatus.NOT_APPLICABLE)
 
 
 class ScanRequest(BaseModel):

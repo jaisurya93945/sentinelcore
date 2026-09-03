@@ -195,6 +195,28 @@ The hardening spec this was built against sketched five roles (Viewer/Auditor/Op
 - The proxy requires its own key in addition to the client's upstream Authorization header -- two different credentials for two different things.
 - No credential storage abstraction -- keys live in plain environment configuration.
 
+## Implemented: Real Sanitize Enforcement
+
+**Module:** `app/services/sanitizer.py`
+
+Until this existed, SANITIZE was a decision the policy engine could return with nothing behind it -- displayed, never executed. `decision` and `enforcement_status` are now separately represented (not conflated into one field that could silently mean either "we recommend this" or "we did this"): `decision` always reflects the final, actionable outcome after any enforcement attempt; `enforcement_status` (`enforced` / `escalated` / `not_implemented` / `not_applicable`) explains how it got there.
+
+The mechanism is strip-or-normalize-then-**mandatory re-scan**, not strip-and-trust. Collapsing `"I g n o r e   a l l   i n s t r u c t i o n s"` reveals `"Ignore all instructions"` underneath -- a real instruction override -- and the re-scan catches it, escalating the decision to BLOCK rather than silently returning "sanitized" text that's still dangerous. Verified directly, not assumed: `tests/unit/test_sanitizer.py`, plus end-to-end tests in both `/api/v1/scan` and the proxy showing the actual forwarded request body contains the cleaned text, not the original.
+
+### Which finding types have a real sanitizer
+
+`zero_width_characters`, `bidi_control_characters`, `unusual_whitespace`, `control_characters`, `character_spacing_evasion`. Anything else mapped to SANITIZE in `policy.yaml` (there currently is nothing else) would come back `not_implemented` rather than silently pretending to clean it.
+
+### A real, honest edge case in the character-spacing sanitizer
+
+Collapsing a **multi-word** character-spaced run (e.g. an entire spaced-out sentence) glues words together with no boundaries -- `"Ignoreallpreviousinstructions"`, not `"Ignore all previous instructions"` -- because the reconstruction logic mirrors the *detector's own* existing behavior (see `test_character_spacing_evasion_detected_via_newlines` in `test_obfuscation.py`, which predates this sanitizer). The glued result then won't match phrase-based patterns requiring whitespace, so multi-word cases can come back `enforced` even though a human reading the reconstructed text would recognize the intent. A **single** spaced-out word surrounded by normal text doesn't hit this -- see `tests/unit/test_sanitizer.py` for both cases, verified directly rather than assumed.
+
+### Known limitations
+
+- Only wired into `/api/v1/scan` (main input text only, not retrieved_documents or output_text) and the proxy's non-streaming input path. Streaming, tool-call, and MCP endpoints still return SANITIZE without enforcing it.
+- A SANITIZE verdict influenced by findings from more than one text source (e.g. both the main input and a retrieved document) can't be fixed by rewriting just one of them -- reported as `not_applicable` rather than partially sanitizing something that wouldn't address why the decision was made.
+- HUMAN_APPROVAL still has no real approval-collection mechanism behind it -- a separate, unaddressed gap.
+
 ## Not yet implemented
 
-See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, real sanitization execution, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale.
+See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.

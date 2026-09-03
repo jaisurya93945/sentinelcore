@@ -24,6 +24,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Dashboard (`GET /dashboard`) | Screenshot-verified against live seeded data |
 | Attack Replay Lab (version snapshot + diff, regression detection) | `scripts/replay_lab.py`, real v0.1→v0.2→v0.3 comparisons |
 | Real evaluation (744 labeled examples, 2 external MIT-licensed datasets) | `docs/research/README.md` |
+| Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
 | Docker (multi-stage, non-root) | Not build-tested -- flagged in the file itself |
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |
 | Authentication + role-based authorization (viewer/operator/admin) | `tests/unit/test_auth.py`, `test_auth_integration.py` -- all 6 scenarios live-verified |
@@ -34,16 +35,17 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 
 | Capability | The real caveat |
 |---|---|
-| SANITIZE decision | Returned by the policy engine; nothing executes it. No text is ever actually sanitized. |
+| SANITIZE decision | Enforced in `/api/v1/scan` and the proxy's non-streaming path with mandatory re-scan + escalation. Not yet wired into streaming/tool-call/MCP paths. |
 | HUMAN_APPROVAL decision | Returned correctly; no mechanism exists to collect an actual approval. |
 | Streaming cutoff | A trigger pattern split exactly across a chunk boundary can partially leak before detection completes. |
 | Origin tagging | Tracked and returned, but doesn't yet affect scoring or policy. |
 | Output blocking (proxy) | Stops the leak from reaching the client; does not stop the upstream API cost, already incurred. |
 | Authentication | Real when enabled, but off by default -- a documented risk if network-reachable without configuring it. |
+| SANITIZE enforcement | Real for the finding types with a defined transform; a multi-word character-spacing collapse can under-represent danger by gluing words together (documented edge case, not hidden). |
 
 ## 3. Planned, Not Implemented
 
-Conflicting-instruction detection · source trust/provenance tracking · sanitize execution · origin-aware policy weighting · rate limiting/circuit breakers · Python/JS SDKs · CLI · Kubernetes/Helm · RBAC/ABAC beyond the 3-role auth model · SIEM/alerting integration · multi-tenancy · horizontal scaling · autonomous red-teaming · key rotation tooling.
+Conflicting-instruction detection · source trust/provenance tracking · sanitize enforcement for streaming/tool-call/MCP · origin-aware policy weighting · rate limiting/circuit breakers · Python/JS SDKs · CLI · Kubernetes/Helm · RBAC/ABAC beyond the 3-role auth model · SIEM/alerting integration · multi-tenancy · horizontal scaling · autonomous red-teaming · key rotation tooling.
 
 ## 4. Security Gaps (stated plainly)
 
