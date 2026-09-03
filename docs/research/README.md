@@ -267,3 +267,55 @@ The oracle had **zero false positives by construction**. That is precisely the a
 3. **Oracle experiments systematically overstate provenance mechanisms.** This is a methodological result, and it applies beyond this codebase: any evaluation that grants a defense ground-truth detection will overstate the value of anything layered on top of it, because the layer's cost is paid in false positives the oracle cannot produce.
 
 Finding 4 is superseded. It is retained above, unedited, because the sequence — oracle result, contradicting real-detector result, diagnosis — is the actual contribution.
+
+
+---
+
+# Statistical Validation
+
+`python scripts/statistical_validation.py` — 10 independent stratified splits, McNemar's exact test, 10,000-sample bootstrap CIs.
+
+## What survives scrutiny
+
+| 10 seeds, mean [95% CI] | Rules | Learned |
+|---|---|---|
+| Precision | 0.970 [0.883, 1.000] | 0.930 [0.881, 0.965] |
+| **Recall** | **0.185 [0.122, 0.287]** | **0.884 [0.829, 0.965]** |
+| F1 | 0.308 [0.217, 0.446] | 0.906 [0.872, 0.951] |
+| FPR | 0.005 [0.000, 0.022] | 0.058 [0.028, 0.104] |
+
+Recall and FPR intervals do not overlap. **McNemar's exact test rejects the null on 10/10 seeds, max p = 5.6×10⁻⁶.** The detection-recall finding is solid.
+
+### A second single-split artifact, caught by doing this
+
+The previous correction replaced an invalid 4.84× claim with 3.10×, measured on seed 20260903. Over 10 seeds the rules baseline averages **0.185** recall — the single split gave it 0.275, near the *top* of its interval, i.e. unusually favourable to the baseline. The representative improvement is **4.78×**.
+
+So the original 4.84× was approximately right *in magnitude* while being wrong *in method*, and the 3.10× correction was right in method but based on an unrepresentative split. Both single-split figures were artifacts. Only the multi-seed interval is a defensible estimate. This is recorded rather than tidied away because it is a clean demonstration of why single-split results should not be trusted — including our own.
+
+## What does NOT survive scrutiny
+
+Bootstrap 95% CIs on the agent benchmark (22 attack / 15 benign traces):
+
+| Config | APR [95% CI] | BCR [95% CI] |
+|---|---|---|
+| A rules | 0.727 [0.545, 0.909] | 1.000 [1.000, 1.000] |
+| C + tool authz | 0.818 [0.636, 0.955] | 0.933 [0.800, 1.000] |
+| H oracle(MED) | 0.818 [0.636, 0.955] | 0.933 [0.800, 1.000] |
+| I oracle(MED) + prov | 0.909 [0.773, 1.000] | 0.933 [0.800, 1.000] |
+| J learned | 1.000 [1.000, 1.000] | 0.800 [0.600, 1.000] |
+| K learned + prov | 1.000 [1.000, 1.000] | 0.600 [0.333, 0.867] |
+
+**Intervals span roughly ±18 points. None of Findings 1, 4 or 5's headline differences are statistically significant at this sample size.**
+
+Specifically:
+- Tool authorization's +9.1pp (A→C): **not significant** — intervals overlap heavily.
+- Provenance's +9.1pp under oracle (H→I): **not significant**.
+- Provenance's −20pp utility cost (J→K): **not significant** — [0.600, 1.000] vs [0.333, 0.867].
+
+### What this does and does not invalidate
+
+It does **not** invalidate the mechanisms, which rest on causal diagnosis rather than rate comparison: the four attacks surviving every rules configuration were verified to produce *zero findings*, and the three benign workflows broken by provenance escalation were individually identified and traced. A verified mechanism plus a non-significant rate difference is weaker than a significant one, but it is not the same as no evidence.
+
+It does mean the **numbers should not be quoted as measured effect sizes**. They are directional, with named mechanisms, on an underpowered benchmark.
+
+**The single highest-value extension to this work is therefore not a new mechanism — it is 5–10× more agent traces.** That is a tractable, unglamorous, and necessary next step, and it is identified here rather than deferred to a vague "future work" line.

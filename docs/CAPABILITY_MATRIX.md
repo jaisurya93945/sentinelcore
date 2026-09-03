@@ -27,7 +27,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Model-generated tool-call interception in the proxy (P0 fix) | `tests/unit/test_proxy.py` -- 6 regression tests incl. streaming fragment reassembly |
 | Provenance-aware risk scoring (origin trust multipliers) | `tests/unit/test_origin_trust.py` -- verified to change actual decisions, with an ablation off-switch |
 | Learned classifier detector (optional, off by default) | `tests/unit/test_ml_detector.py`; head-to-head on identical held-out split (`scripts/compare_baselines.py`): recall 27.54% -> 85.51% (3.10x), FPR 0.00% -> 5.00% |
-| Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5 |
+| Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
+| Statistical validation (10 seeds, McNemar, bootstrap CIs) | `scripts/statistical_validation.py`. Detection-recall finding solid (10/10 seeds, p<5.6e-6, non-overlapping CIs); agent-benchmark findings are not |
 | Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
 | Docker (multi-stage, non-root) | Not build-tested -- flagged in the file itself |
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |

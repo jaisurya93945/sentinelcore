@@ -8,9 +8,9 @@
 
 Defenses for LLM agents increasingly layer provenance tracking and authority enforcement on top of a content detector. We evaluate this layering directly, using an 11-configuration ablation over an agent-trace benchmark, and report three results that complicate the prevailing design.
 
-First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises attack prevention from 81.8% to 100% on our benchmark, a larger gain than any policy mechanism we tested.
+First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 81.8% to 100%, a larger gain than any policy mechanism we tested.
 
-Second, **provenance-aware escalation is not free, and its measured value depends on how detection is simulated.** With a ground-truth oracle detector, adding provenance improves attack prevention by 9.1 points at zero utility cost. With a real classifier of comparable recall, the same mechanism yields no additional prevention and costs 20 points of benign task completion.
+Second, **provenance-aware escalation is not free, and its apparent value depends on how detection is simulated.** With a ground-truth oracle detector, adding provenance improves attack prevention by 9.1 points at zero utility cost. With a real classifier of comparable recall, the same mechanism yields no additional prevention and costs 20 points of benign task completion. *These agent-benchmark differences are not statistically significant at our sample size (bootstrap CIs span ±18 points); we support them with causal diagnosis of the specific scenarios that change, and state plainly that the benchmark needs 5–10× more traces to resolve them.*
 
 Third, and consequently, **oracle-based evaluation systematically overstates layered defenses.** An oracle has no false positives by construction; a layer whose cost is paid in escalated false positives therefore appears free. We argue this is a general hazard for evaluations of provenance and authority mechanisms, not a quirk of our system.
 
@@ -123,11 +123,26 @@ The **oracle** flags attacker-authored content by ground-truth label. It deliber
 | F1 | 43.18% | 89.39% |
 | FPR | 0.00% | 5.00% |
 
-**3.10× recall improvement**, at a real precision and false-positive cost.
+*Correction:* an earlier draft quoted 17.68% for the rules baseline — measured over all 744 examples, not the held-out split, and therefore not comparable to the classifier's split-based 85.51%. On identical data the baseline scores 27.54%.
 
-*Correction:* an earlier draft of this work quoted 17.68% for the rules baseline — that figure is measured over all 744 examples, not the held-out split, and comparing it to the classifier's split-based 85.51% is invalid. On identical data the baseline scores 27.54%. The corrected improvement is 3.10×, not 4.84×.
+**But a single split is not sufficient evidence either.** Repeating over 10 independent stratified splits (§5.2):
 
-### 5.2 Ablation
+| 10 seeds, mean [95% CI] | Rules | Learned |
+|---|---|---|
+| Precision | 0.970 [0.883, 1.000] | 0.930 [0.881, 0.965] |
+| **Recall** | **0.185 [0.122, 0.287]** | **0.884 [0.829, 0.965]** |
+| F1 | 0.308 [0.217, 0.446] | 0.906 [0.872, 0.951] |
+| FPR | 0.005 [0.000, 0.022] | 0.058 [0.028, 0.104] |
+
+Recall and FPR confidence intervals do not overlap. **McNemar's exact test (paired, same test set) rejects the null on 10 of 10 seeds, max p = 5.6×10⁻⁶.**
+
+The single seed used above (20260903) gave the rules baseline 27.54% recall — near the *top* of its 10-seed interval, and thus unusually favourable to the baseline. The representative improvement is **4.78× (0.185 → 0.884)**, not 3.10×. Both figures are correct for their respective data; the 3.10× is a single-split artifact, which is exactly what multi-seed evaluation exists to expose.
+
+### 5.2 Statistical validation
+
+10 independent stratified splits, McNemar's exact test for the paired classifier comparison, and 10,000-sample bootstrap CIs for the agent-benchmark rates. Reproduce with `scripts/statistical_validation.py`.
+
+### 5.3 Ablation
 
 | Config | APR | BCR |
 |---|---|---|
@@ -143,13 +158,30 @@ The **oracle** flags attacker-authored content by ground-truth label. It deliber
 | J learned | **100.0%** | 80.0% |
 | K learned + prov. | 100.0% | **60.0%** |
 
+**These differences are not statistically significant at this sample size.** Bootstrap 95% CIs over 22 attack and 15 benign traces:
+
+| Config | APR [95% CI] | BCR [95% CI] |
+|---|---|---|
+| A rules | 0.727 [0.545, 0.909] | 1.000 [1.000, 1.000] |
+| C + tool authz | 0.818 [0.636, 0.955] | 0.933 [0.800, 1.000] |
+| H oracle(MED) | 0.818 [0.636, 0.955] | 0.933 [0.800, 1.000] |
+| I oracle(MED)+prov | 0.909 [0.773, 1.000] | 0.933 [0.800, 1.000] |
+| J learned | 1.000 [1.000, 1.000] | 0.800 [0.600, 1.000] |
+| K learned+prov | 1.000 [1.000, 1.000] | 0.600 [0.333, 0.867] |
+
+Every pairwise APR comparison among A/C/H/I has heavily overlapping intervals. **The +9.1-point differences reported below are directionally suggestive but not statistically distinguishable from noise at n=22.** The same holds for the −20-point BCR difference between J and K (intervals [0.600, 1.000] and [0.333, 0.867] overlap substantially).
+
+We report the mechanisms anyway, because the evidence for them is **causal-diagnostic rather than rate-based**: we identify the specific scenarios that change and verify why (§5.3.1, §5.4). A rate difference that is not significant, plus a verified mechanism explaining exactly which cases move and why, is weaker evidence than a significant rate difference but stronger than either alone. The honest conclusion is that **the agent benchmark needs roughly 5–10× more traces to resolve effects of this size**, and that is the single most valuable extension to this work.
+
+#### 5.3.1 Mechanisms
+
 **Tool authorization** contributes +9.1 APR (A→C), entirely within `compositional` and `unauthorized_tool` (both 75%→100%) — categories where the attack is a privileged action with clean arguments that no content scanner can see. It costs 6.7 BCR, traced to one identified scenario: a legitimate destructive operation blocked by policy.
 
 **Provenance over rules-based detection contributes nothing** (A→B, C→D, D→E all null). Diagnosis: categorical per-type policy rules fire regardless of score, so score weighting never reaches a consulted threshold. Applying provenance at the *rule* layer instead (E) also changed zero of 37 decisions. Both null results have the same cause — the four attacks surviving every rules configuration produce **zero findings** (paraphrased, non-English, purely semantic, soft-phrased). Provenance re-weights findings that exist; zero multiplied by any trust factor is zero.
 
 **Detection quality dominates.** J reaches 100% APR. The entire 18.2-point gap between C and J is detection, not policy.
 
-### 5.3 The oracle inverts the provenance result
+### 5.4 The oracle inverts the provenance result
 
 With an ambiguous-confidence oracle, provenance is a clean win: **H→I, +9.1 APR at zero BCR cost.**
 
@@ -177,7 +209,7 @@ The oracle has **zero false positives by construction**. That is precisely the a
 
 1. **Self-authored agent benchmark.** 37 traces written by the same authors as the system. Mitigations: categories drawn from published taxonomies; nine scenarios deliberately included that the system is expected to fail; hard benign cases included so utility cost is measured. APR is 81.8%, not 100% — had it been 100%, the benchmark would be broken. This remains the most serious threat and is only fully addressed by external benchmarks (AgentDojo, InjecAgent), which we have not yet run.
 2. **No live agent.** Deterministic trace replay, not a model-driven agent.
-3. **Small scale.** 37 traces, 744 text examples, 149 held-out. No confidence intervals or significance testing; single seed. Differences of a few points should not be over-read.
+3. **Small scale, quantified.** The text-benchmark results are statistically solid: 10 seeds, non-overlapping CIs, McNemar p < 5.6×10⁻⁶ on every seed. **The agent-benchmark results are underpowered.** With 22 attack and 15 benign traces, bootstrap CIs span roughly ±18 points, so none of the ablation's 9–20 point differences are statistically distinguishable. Those findings rest on causal diagnosis of named scenarios rather than on rate differences, and should be read as mechanistic hypotheses with supporting traces, not as measured effect sizes. Resolving them requires roughly 5–10× more traces.
 4. **The classifier is lexical, not semantic.** It will not generalize to novel semantic attacks or to languages outside its training data.
 5. **Single trust-multiplier configuration.** Constants are a stated modeling choice, not calibrated.
 6. **No comparison against published defenses.** We compare our own configurations, not against Progent, CaMeL, or similar.
