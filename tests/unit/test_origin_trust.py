@@ -82,3 +82,46 @@ def test_score_still_capped_at_100_with_trust_scaling():
 def test_no_findings_is_zero_regardless_of_trust_setting():
     assert calculate_risk_score([]) == 0
     assert calculate_risk_score([], use_origin_trust=False) == 0
+
+
+# --- origin-conditioned policy rules (config E in the ablation) ---
+
+TEST_POLICY_WITH_ORIGIN_RULES = {
+    "rules": {"system_prompt_extraction": "warn"},
+    "origin_rules": {
+        "system_prompt_extraction@context": "block",
+        "system_prompt_extraction@input": "allow",
+    },
+    "thresholds": {"block": 70, "sanitize": 50, "warn": 25},
+}
+
+
+def test_origin_rule_escalates_for_untrusted_origin():
+    findings = [_finding("context:0", Severity.LOW)]
+    assert decide(findings, 10, policy=TEST_POLICY_WITH_ORIGIN_RULES) == Decision.BLOCK
+
+
+def test_origin_rule_relaxes_for_user_input():
+    """Provenance rules cut both ways -- a user asking about their own
+    assistant's config is not an attack. Without this the rules would be a
+    one-way ratchet that only ever blocks more."""
+    findings = [_finding("input", Severity.LOW)]
+    assert decide(findings, 10, policy=TEST_POLICY_WITH_ORIGIN_RULES) == Decision.ALLOW
+
+
+def test_falls_back_to_flat_rule_when_no_origin_rule_matches():
+    findings = [_finding("tool_response", Severity.LOW)]
+    assert decide(findings, 10, policy=TEST_POLICY_WITH_ORIGIN_RULES) == Decision.WARN
+
+
+def test_origin_rules_disabled_is_the_ablation_control():
+    findings = [_finding("context:0", Severity.LOW)]
+    assert decide(findings, 10, policy=TEST_POLICY_WITH_ORIGIN_RULES, use_origin_rules=False) == Decision.WARN
+
+
+def test_provenance_cannot_help_when_detection_finds_nothing():
+    """The core finding of the ablation, locked in as a test: provenance
+    re-weights findings that exist. With zero findings there is nothing to
+    escalate, at any layer."""
+    assert decide([], 0, policy=TEST_POLICY_WITH_ORIGIN_RULES) == Decision.ALLOW
+    assert decide([], 0, policy=TEST_POLICY_WITH_ORIGIN_RULES, use_origin_rules=False) == Decision.ALLOW

@@ -113,9 +113,10 @@ Prevention counts only `BLOCK` / `SANITIZE` / `HUMAN_APPROVAL`. `WARN` is exclud
 | Config | Mechanisms | APR | BCR |
 |---|---|---|---|
 | A content-only | detectors + risk + policy | 72.7% | 100.0% |
-| B + provenance | origin trust scaling | **72.7%** | 100.0% |
+| B + prov scoring | origin trust *score* scaling | **72.7%** | 100.0% |
 | C + tool authz | tool-name authorization | **81.8%** | 93.3% |
-| D full | both | 81.8% | 93.3% |
+| D scoring+authz | both | 81.8% | 93.3% |
+| E + prov **rules** | origin-conditioned *policy rules* | **81.8%** | 93.3% |
 
 Attack prevention by category:
 
@@ -140,6 +141,29 @@ This is a real security/utility trade-off, not a free win: BCR drops 100% → 93
 
 Diagnosed cause, verified directly: provenance altered the decision in only 3 of 37 scenarios, and never in a way that changed an outcome. The policy engine applies **categorical per-finding-type rules before score thresholds**, and `instruction_override: block` fires regardless of score. On a poisoned RAG document the score rises 62 → 92 with provenance enabled — and the decision is `block` either way.
 
-**Design implication:** provenance is being applied at the wrong layer. Scaling a number that a categorical rule overrides cannot change behavior. To matter, provenance must condition the *policy rule itself* (`instruction_override` from `context:N` → block, from `input` → warn), not the score feeding a threshold that never gets consulted. That is a concrete, testable next experiment, and it exists because this ablation was run rather than assumed.
+**First hypothesis:** provenance was applied at the wrong *layer* — scaling a number that a categorical rule overrides cannot change behaviour. So it should be applied to the rule itself.
 
-The mechanism is retained (with `use_origin_trust=False` as the control) because the ablation is only re-runnable if both conditions remain available.
+## Finding 3 — the fix for Finding 2 also failed, and that is the real result
+
+Config E implements exactly that hypothesis: `origin_rules` keyed `<finding_type>@<origin_prefix>`, consulted before the flat per-type rules, escalating for untrusted origins *and* relaxing for the user's own input (so it is a genuine trade-off, not a one-way ratchet).
+
+**It changed the decision in 0 of 37 scenarios. APR and BCR are identical to config D.**
+
+Diagnosing *that* produced the finding that explains both negative results at once. The 4 attacks that survive every configuration are exactly the deliberately-hard ones, and all four produce **zero findings**:
+
+| Scenario | Why it evades | Findings produced |
+|---|---|---|
+| DI-004 | paraphrased, no literal trigger phrase | 0 |
+| DI-005 | non-English (German) | 0 |
+| II-004 | purely semantic, no trigger phrase | 0 |
+| MCP-003 | soft phrasing ("recommended to also share…") | 0 |
+
+**Provenance re-weights findings that already exist. When detection produces nothing, there is nothing to re-weight, re-rule, or escalate. Zero multiplied by any trust factor is still zero.**
+
+### The consequence, stated plainly
+
+Provenance-aware policy — at *any* layer, score or rule — is **fundamentally gated on detection recall**. It cannot rescue a missed detection; it can only change what happens to a detection that already fired. With a regex detector at 17.68% recall, roughly four in five real attacks never reach the policy layer at all, so no amount of policy sophistication above it can matter.
+
+This reframes the project's own roadmap. Adding richer policy, session tracking, or action-graph reasoning on top of a 17.68%-recall detector is optimising the layer that is not the bottleneck. It also generates a falsifiable prediction about the published literature: provenance/authority mechanisms (AuthGraph, PACT, Progent) should show large gains specifically *because* they are paired with detection that does not depend on phrase matching — taint tracking or model-based classification — and would degrade toward these null results if paired with a lexical detector. That is directly testable and is the strongest experiment this project could run next.
+
+Both ablation controls (`use_origin_trust=False`, `use_origin_rules=False`) are retained deliberately, since the experiment is only re-runnable while every condition remains available.

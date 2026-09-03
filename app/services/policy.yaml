@@ -30,6 +30,37 @@ rules:
   phone_number: warn
   ip_address: warn
 
+# Origin-conditioned rules, checked BEFORE the flat rules above.
+# Key format: <finding_type>@<origin_prefix>
+#
+# These exist because of a measured negative result: origin-weighted
+# SCORING changed nothing, because the categorical rules above fire
+# regardless of score (docs/research/README.md, Finding 2). Provenance
+# only changes behaviour if it conditions the rule itself.
+#
+# Two directions, both deliberate:
+#   - ESCALATE for untrusted origins: the same text is more dangerous
+#     arriving from a retrieved document or a model-generated tool
+#     argument than from the user's own keyboard.
+#   - RELAX for the user's own input: a person asking their own
+#     assistant "what are your instructions?" is curiosity, not an
+#     attack, and blocking it is a pure utility cost. This direction is
+#     what makes the rules a real trade-off rather than a one-way
+#     ratchet that only ever blocks more.
+origin_rules:
+  # Someone else's text telling the model what to do -- always block.
+  system_prompt_extraction@context: block
+  system_prompt_extraction@tool_response: block
+  system_prompt_extraction@tool_description: block
+  # The user asking about their own assistant's configuration is not an
+  # attack. Downgraded from the flat `warn` to allow.
+  system_prompt_extraction@input: allow
+  # Obfuscation in external content is far more suspicious than a stray
+  # unicode character in something a human typed.
+  mixed_script_homoglyph@context: block
+  mixed_script_homoglyph@tool_description: block
+  encoded_payload_suspected@tool_arguments: block
+
 thresholds:
   block: 70
   sanitize: 50

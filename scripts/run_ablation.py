@@ -15,9 +15,15 @@ Ablation configurations, isolating each mechanism:
 
     A  content-only    detectors + risk + policy, origin ignored,
                        no tool-name authorization        (the 2025 baseline)
-    B  + provenance    origin trust scaling enabled
+    B  + prov scoring  origin trust SCORE scaling enabled
     C  + tool authz    deterministic tool-name authorization enabled
-    D  full            both
+    D  scoring+authz   both of the above
+    E  + prov RULES    origin-conditioned POLICY RULES enabled
+
+    E exists because B produced a null result: score weighting is
+    subsumed by categorical per-type rules that never consult the
+    threshold. E tests whether applying provenance at the RULE layer
+    instead changes that -- the hypothesis the ablation itself generated.
 
 The point is CAUSAL: if B and C both matter, APR should rise for different
 scenario categories, and the categories should be predictable from the
@@ -50,10 +56,11 @@ RESULTS = Path(__file__).parent.parent / "dataset" / "processed" / "ablation_res
 BLOCKING = {Decision.BLOCK, Decision.SANITIZE, Decision.HUMAN_APPROVAL}
 
 CONFIGS = {
-    "A_content_only": {"provenance": False, "tool_authz": False},
-    "B_provenance": {"provenance": True, "tool_authz": False},
-    "C_tool_authz": {"provenance": False, "tool_authz": True},
-    "D_full": {"provenance": True, "tool_authz": True},
+    "A_content_only": {"provenance": False, "tool_authz": False, "origin_rules": False},
+    "B_prov_scoring": {"provenance": True, "tool_authz": False, "origin_rules": False},
+    "C_tool_authz": {"provenance": False, "tool_authz": True, "origin_rules": False},
+    "D_scoring_authz": {"provenance": True, "tool_authz": True, "origin_rules": False},
+    "E_prov_rules": {"provenance": True, "tool_authz": True, "origin_rules": True},
 }
 
 
@@ -67,7 +74,7 @@ def _scan(text: str, origin: str) -> list[Finding]:
     return findings
 
 
-def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool) -> Decision:
+def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False) -> Decision:
     """Replays one trace, returning the most severe decision reached."""
     decisions: list[Decision] = []
     doc_index = 0
@@ -93,7 +100,7 @@ def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool) -> De
             findings = _scan(json.dumps(ev["arguments"]), f"tool_arguments:{name}")
 
         score = calculate_risk_score(findings, use_origin_trust=provenance)
-        local.append(decide(findings, score))
+        local.append(decide(findings, score, use_origin_rules=origin_rules))
         decisions.extend(local)
 
     return most_severe(decisions) if decisions else Decision.ALLOW
@@ -116,7 +123,7 @@ def main():
         by_category = defaultdict(lambda: {"total": 0, "prevented": 0})
 
         for s in attacks:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"])
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"])
             ok = d in BLOCKING
             prevented += ok
             by_category[s["category"]]["total"] += 1
@@ -124,7 +131,7 @@ def main():
             per_scenario[s["id"]][cfg_name] = d.value
 
         for s in benign:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"])
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"])
             ok = d not in BLOCKING
             completed += ok
             per_scenario[s["id"]][cfg_name] = d.value

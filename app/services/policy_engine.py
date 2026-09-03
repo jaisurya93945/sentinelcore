@@ -44,15 +44,39 @@ def most_severe(decisions: list[Decision]) -> Decision:
     return Decision.ALLOW
 
 
-def decide(findings: list[Finding], risk_score: int, policy: dict | None = None) -> Decision:
+def decide(
+    findings: list[Finding],
+    risk_score: int,
+    policy: dict | None = None,
+    use_origin_rules: bool = True,
+) -> Decision:
+    """
+    Two-layer, most-severe-wins.
+
+    `origin_rules` (optional, keyed `<finding_type>@<origin_prefix>`) is
+    consulted BEFORE the flat per-type rule. This exists because of a
+    measured negative result: origin-weighted *scoring* changed nothing in
+    the agent-trace ablation, since categorical per-type rules fire
+    regardless of score and never consult the threshold the weighting
+    affects (see docs/research/README.md, Finding 2). Provenance only
+    changes behaviour if it conditions the RULE, which is what this does.
+
+    `use_origin_rules=False` is the ablation control, matching
+    `use_origin_trust=False` in the risk engine.
+    """
     policy = policy if policy is not None else load_policy()
     rules: dict[str, str] = policy.get("rules", {})
+    origin_rules: dict[str, str] = policy.get("origin_rules", {}) if use_origin_rules else {}
     thresholds: dict[str, int] = policy.get("thresholds", {})
 
     candidates: list[Decision] = []
 
     for finding in findings:
-        if finding.type in rules:
+        origin_prefix = finding.origin.split(":", 1)[0]
+        keyed = f"{finding.type}@{origin_prefix}"
+        if keyed in origin_rules:
+            candidates.append(Decision(origin_rules[keyed]))
+        elif finding.type in rules:
             candidates.append(Decision(rules[finding.type]))
 
     if risk_score >= thresholds.get("block", 100):
