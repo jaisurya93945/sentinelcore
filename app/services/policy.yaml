@@ -29,6 +29,7 @@ rules:
   email_address: warn
   phone_number: warn
   ip_address: warn
+  oracle_injection: warn
 
 # Origin-conditioned rules, checked BEFORE the flat rules above.
 # Key format: <finding_type>@<origin_prefix>
@@ -47,7 +48,18 @@ rules:
 #     attack, and blocking it is a pure utility cost. This direction is
 #     what makes the rules a real trade-off rather than a one-way
 #     ratchet that only ever blocks more.
+
 origin_rules:
+  # Experimental oracle detector (scripts/run_ablation.py only -- never
+  # registered in the running system). Its flat rule is WARN; these
+  # escalate it by provenance. This isolates whether provenance can
+  # safely trade permissiveness on the user's own input for strictness
+  # on external content.
+  oracle_injection@context: block
+  oracle_injection@tool_response: block
+  oracle_injection@tool_description: block
+  oracle_injection@tool_arguments: block
+  oracle_injection@input: warn
   # Someone else's text telling the model what to do -- always block.
   system_prompt_extraction@context: block
   system_prompt_extraction@tool_response: block

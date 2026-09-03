@@ -41,7 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.detectors.registry import get_registered_detectors  # noqa: E402
-from app.models.finding import Decision, Finding  # noqa: E402
+from app.models.finding import Decision, Finding, Severity  # noqa: E402
 from app.services.policy_engine import decide, most_severe  # noqa: E402
 from app.services.risk_engine import calculate_risk_score  # noqa: E402
 from app.services.tool_policy import authorize_tool  # noqa: E402
@@ -61,7 +61,44 @@ CONFIGS = {
     "C_tool_authz": {"provenance": False, "tool_authz": True, "origin_rules": False},
     "D_scoring_authz": {"provenance": True, "tool_authz": True, "origin_rules": False},
     "E_prov_rules": {"provenance": True, "tool_authz": True, "origin_rules": True},
+    # Oracle-detector conditions: isolate the POLICY layer by removing
+    # detection recall as the bottleneck. Tests Finding 3 causally.
+    # Oracle-detector conditions: remove detection recall as the
+    # bottleneck to test Finding 3 causally.
+    # HIGH severity saturates the score threshold (ceiling effect).
+    "F_oracleHI_flat": {"provenance": False, "tool_authz": True, "origin_rules": False, "oracle": Severity.HIGH},
+    "G_oracleHI_prov": {"provenance": True, "tool_authz": True, "origin_rules": True, "oracle": Severity.HIGH},
+    # MEDIUM severity = ambiguous signal, leaves headroom for provenance.
+    "H_oracleMED_flat": {"provenance": False, "tool_authz": True, "origin_rules": False, "oracle": Severity.MEDIUM},
+    "I_oracleMED_prov": {"provenance": True, "tool_authz": True, "origin_rules": True, "oracle": Severity.MEDIUM},
 }
+
+
+def _oracle_findings(ev: dict, origin: str, severity: Severity) -> list[Finding]:
+    """
+    Oracle detector: perfect recall on attacker-authored CONTENT, by
+    ground-truth label. Not a real detector -- an experimental upper bound
+    used to answer a single question: does provenance change outcomes when
+    detection is no longer the bottleneck?
+
+    Run at two severities on purpose. A HIGH-severity oracle scores 60,
+    which already clears the `sanitize` threshold of 50, so the outcome is
+    decided before provenance is ever consulted -- a ceiling effect that
+    makes the provenance comparison meaningless. A MEDIUM-severity oracle
+    scores 30 (WARN, not prevention), leaving the headroom needed to ask
+    whether provenance can safely escalate untrusted origins. Both are
+    reported; the difference between them is itself a result.
+    """
+    if not ev.get("oracle_malicious"):
+        return []
+    f = Finding(
+        detector="oracle",
+        type="oracle_injection",
+        description="ground-truth attacker-authored content",
+        severity=severity,
+    )
+    f.origin = origin
+    return [f]
 
 
 def _scan(text: str, origin: str) -> list[Finding]:
@@ -74,7 +111,7 @@ def _scan(text: str, origin: str) -> list[Finding]:
     return findings
 
 
-def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False) -> Decision:
+def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False, oracle: Severity | None = None) -> Decision:
     """Replays one trace, returning the most severe decision reached."""
     decisions: list[Decision] = []
     doc_index = 0
@@ -85,19 +122,29 @@ def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origi
         local: list[Decision] = []
 
         if kind == "user_input":
-            findings = _scan(ev["text"], "input")
+            origin = "input"
+            findings = _scan(ev["text"], origin)
         elif kind == "retrieved_doc":
-            findings = _scan(ev["text"], f"context:{doc_index}")
+            origin = f"context:{doc_index}"
+            findings = _scan(ev["text"], origin)
             doc_index += 1
         elif kind == "tool_response":
-            findings = _scan(ev["text"], "tool_response")
+            origin = "tool_response"
+            findings = _scan(ev["text"], origin)
         elif kind == "mcp_tool_def":
-            findings = _scan(ev["text"], f"tool_description:{ev['name']}")
+            origin = f"tool_description:{ev['name']}"
+            findings = _scan(ev["text"], origin)
         elif kind == "tool_call":
             name = ev["name"]
+            origin = f"tool_arguments:{name}"
             if tool_authz:
                 local.append(authorize_tool(name))
-            findings = _scan(json.dumps(ev["arguments"]), f"tool_arguments:{name}")
+            findings = _scan(json.dumps(ev["arguments"]), origin)
+        else:
+            origin = "input"
+
+        if oracle:
+            findings = findings + _oracle_findings(ev, origin, oracle)
 
         score = calculate_risk_score(findings, use_origin_trust=provenance)
         local.append(decide(findings, score, use_origin_rules=origin_rules))
@@ -123,7 +170,7 @@ def main():
         by_category = defaultdict(lambda: {"total": 0, "prevented": 0})
 
         for s in attacks:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"])
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"))
             ok = d in BLOCKING
             prevented += ok
             by_category[s["category"]]["total"] += 1
@@ -131,13 +178,13 @@ def main():
             per_scenario[s["id"]][cfg_name] = d.value
 
         for s in benign:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"])
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"))
             ok = d not in BLOCKING
             completed += ok
             per_scenario[s["id"]][cfg_name] = d.value
 
         results[cfg_name] = {
-            "config": cfg,
+            "config": {k: (v.value if hasattr(v, "value") else v) for k, v in cfg.items()},
             "attack_prevention_rate": round(prevented / len(attacks), 4),
             "benign_completion_rate": round(completed / len(benign), 4),
             "attacks_prevented": prevented,

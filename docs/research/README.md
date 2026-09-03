@@ -117,6 +117,10 @@ Prevention counts only `BLOCK` / `SANITIZE` / `HUMAN_APPROVAL`. `WARN` is exclud
 | C + tool authz | tool-name authorization | **81.8%** | 93.3% |
 | D scoring+authz | both | 81.8% | 93.3% |
 | E + prov **rules** | origin-conditioned *policy rules* | **81.8%** | 93.3% |
+| F oracle(HIGH) flat | perfect-recall oracle detector | 100.0% | 93.3% |
+| G oracle(HIGH) + prov | oracle + provenance | 100.0% | 93.3% |
+| H oracle(MED) flat | oracle at *ambiguous* confidence | 81.8% | 93.3% |
+| I oracle(MED) + prov | oracle + provenance | **90.9%** | 93.3% |
 
 Attack prevention by category:
 
@@ -167,3 +171,42 @@ Provenance-aware policy — at *any* layer, score or rule — is **fundamentally
 This reframes the project's own roadmap. Adding richer policy, session tracking, or action-graph reasoning on top of a 17.68%-recall detector is optimising the layer that is not the bottleneck. It also generates a falsifiable prediction about the published literature: provenance/authority mechanisms (AuthGraph, PACT, Progent) should show large gains specifically *because* they are paired with detection that does not depend on phrase matching — taint tracking or model-based classification — and would degrade toward these null results if paired with a lexical detector. That is directly testable and is the strongest experiment this project could run next.
 
 Both ablation controls (`use_origin_trust=False`, `use_origin_rules=False`) are retained deliberately, since the experiment is only re-runnable while every condition remains available.
+
+
+## Finding 4 — provenance works, but only inside a narrow confidence band
+
+Findings 2 and 3 showed provenance doing nothing. To test whether that was a property of provenance or of *this system's detection*, an **oracle detector** was added: perfect recall on attacker-authored content, by ground-truth label. It is an experimental upper bound, never registered in the running system.
+
+It deliberately does **not** flag TA-001 or MS-004, whose payload is a privileged action with entirely clean text. No content detector, however perfect, can see those — marking them would rig the oracle.
+
+Run at two severities, because the first run had a **ceiling effect** worth reporting rather than hiding: a HIGH-severity oracle scores 60, already clearing the `sanitize` threshold of 50, so the outcome is decided before provenance is consulted (F = G = 100%). A MEDIUM-severity oracle scores 30 — WARN, not prevention — leaving headroom to ask the actual question.
+
+**Result: H → I is +9.1pp APR (81.8% → 90.9%) at zero utility cost (BCR unchanged at 93.3%).**
+
+The category breakdown confirms the mechanism rather than just the outcome:
+
+| Category | H (flat) | I (provenance) |
+|---|---|---|
+| indirect_injection | 75% | **100%** |
+| mcp_poisoning | 67% | **100%** |
+| direct_injection | 60% | 60% |
+
+Both gains are external-content origins (`context`, `tool_description`) — exactly where the trust model predicts. `direct_injection` is unchanged **by design**: `oracle_injection@input: warn` deliberately declines to escalate the user's own keyboard, which is the relaxation direction that makes this a trade-off rather than a one-way ratchet.
+
+### A methodological error found and corrected
+
+The first corrected run reported +4.6pp. Investigating why `mcp_poisoning` improved while `indirect_injection` did not revealed a real bug: the oracle's origin rules had been written into the flat `rules:` block instead of `origin_rules:`, so they never fired, and the apparent gain came entirely from score-weighting. After the fix the effect is +9.1pp and both categories improve, as the mechanism predicts. Recorded because a result that only makes sense after you stop checking is not a result.
+
+## Synthesis: when does provenance matter?
+
+Three regimes, each measured:
+
+| Detection regime | Provenance effect | Why |
+|---|---|---|
+| **Missed** (real regex detectors, 17.7% recall) | **None** (A→B, C→D→E all null) | No finding exists to re-weight. 0 × any trust factor = 0 |
+| **High confidence** (oracle, HIGH) | **None** (F→G null) | Already blocks on score alone; provenance never consulted |
+| **Ambiguous** (oracle, MEDIUM) | **+9.1pp APR, zero utility cost** | The only regime with headroom for provenance to decide |
+
+Provenance-aware policy is neither useless nor a general win. It occupies a **narrow, identifiable band**: detections that fired but are not individually conclusive. That is a precise, falsifiable characterisation, and it directly explains why the published literature reports large gains from provenance/authority mechanisms — those systems pair provenance with detection that produces abundant ambiguous signal (taint tracking, model-based classification), placing them squarely in the third regime. A lexical detector spends most of its time in the first.
+
+**The actionable consequence for this project is unchanged and now quantified: detection recall is the binding constraint.** Under an oracle, APR reaches 100%; the real system reaches 81.8%. The entire 18.2pp gap is detection, not policy.
