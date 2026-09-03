@@ -141,7 +141,10 @@ def main():
 
     # ---- 3. bootstrap on agent traces ----
     rng = random.Random(BASE_SEED)
-    ab = json.loads((ROOT / "dataset/processed/ablation_results.json").read_text())["summary"]
+    _v2 = ROOT / "dataset/processed/ablation_results_v2.json"
+    ab_path = _v2 if _v2.exists() else ROOT / "dataset/processed/ablation_results.json"
+    print(f"\n(agent bootstrap using {ab_path.name})")
+    ab = json.loads(ab_path.read_text())["summary"]
     boot = {}
     for cfg, r in ab.items():
         boot[cfg] = {
@@ -166,8 +169,10 @@ def main():
     print(f"\nMcNemar exact: max p across seeds = {max(ps):.2e}  "
           f"({sum(1 for p in ps if p < 0.05)}/{N_SEEDS} seeds significant at 0.05)")
 
-    print("\n--- agent benchmark, bootstrap 95% CIs (n=22 attack / 15 benign) ---")
-    for cfg in ("A_content_only", "C_tool_authz", "H_oracleMED_flat", "I_oracleMED_prov", "J_ml_flat", "K_ml_prov"):
+    _any = next(iter(ab.values()))
+    print(f"\n--- agent benchmark, bootstrap 95% CIs "
+          f"(n={_any['attacks_total']} attack / {_any['benign_total']} benign) ---")
+    for cfg in ("A_content_only", "B_prov_scoring", "C_tool_authz", "E_prov_rules", "H_oracleMED_flat", "I_oracleMED_prov", "J_ml_flat", "K_ml_prov"):
         a, bb = boot[cfg]["APR"], boot[cfg]["BCR"]
         print(f"{cfg:<20} APR {a['point']:.3f} [{a['ci95_low']:.3f},{a['ci95_high']:.3f}]   "
               f"BCR {bb['point']:.3f} [{bb['ci95_low']:.3f},{bb['ci95_high']:.3f}]")

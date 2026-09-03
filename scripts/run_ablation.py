@@ -46,8 +46,13 @@ from app.services.policy_engine import decide, load_policy, most_severe  # noqa:
 from app.services.risk_engine import calculate_risk_score  # noqa: E402
 from app.services.tool_policy import authorize_tool  # noqa: E402
 
-TRACES = Path(__file__).parent.parent / "dataset" / "processed" / "agent_traces.jsonl"
-RESULTS = Path(__file__).parent.parent / "dataset" / "processed" / "ablation_results.json"
+import os
+
+_V2 = os.environ.get("SENTINELCORE_TRACES_V2", "1") == "1"
+TRACES = Path(__file__).parent.parent / "dataset" / "processed" / (
+    "agent_traces_v2.jsonl" if _V2 else "agent_traces.jsonl"
+)
+RESULTS = Path(__file__).parent.parent / "dataset" / "processed" / ("ablation_results_v2.json" if _V2 else "ablation_results.json")
 
 # A scenario counts as DEFENDED if the pipeline reaches any of these.
 # WARN is deliberately excluded: a warning does not stop anything, and
@@ -225,7 +230,7 @@ def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origi
 
 def main():
     if not TRACES.exists():
-        print("Run: python scripts/build_agent_traces.py")
+        print(f"Missing {TRACES}. Run scripts/build_agent_traces_v2.py (or set SENTINELCORE_TRACES_V2=0)")
         sys.exit(1)
 
     scenarios = [json.loads(line) for line in TRACES.read_text(encoding="utf-8").splitlines() if line.strip()]

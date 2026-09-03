@@ -247,9 +247,9 @@
   "agent_bootstrap": {
     "A_content_only": {
       "APR": {
-        "point": 0.7273,
-        "ci95_low": 0.5455,
-        "ci95_high": 0.9091
+        "point": 0.2824,
+        "ci95_low": 0.1882,
+        "ci95_high": 0.3765
       },
       "BCR": {
         "point": 1.0,
@@ -259,9 +259,9 @@
     },
     "B_prov_scoring": {
       "APR": {
-        "point": 0.7273,
-        "ci95_low": 0.5455,
-        "ci95_high": 0.9091
+        "point": 0.3059,
+        "ci95_low": 0.2118,
+        "ci95_high": 0.4
       },
       "BCR": {
         "point": 1.0,
@@ -271,110 +271,110 @@
     },
     "C_tool_authz": {
       "APR": {
-        "point": 0.8182,
-        "ci95_low": 0.6364,
-        "ci95_high": 0.9545
+        "point": 0.3647,
+        "ci95_low": 0.2588,
+        "ci95_high": 0.4706
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "D_scoring_authz": {
       "APR": {
-        "point": 0.8182,
-        "ci95_low": 0.6364,
-        "ci95_high": 0.9545
+        "point": 0.3882,
+        "ci95_low": 0.2824,
+        "ci95_high": 0.4941
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "E_prov_rules": {
       "APR": {
-        "point": 0.8182,
-        "ci95_low": 0.6364,
-        "ci95_high": 0.9545
+        "point": 0.4,
+        "ci95_low": 0.2941,
+        "ci95_high": 0.5059
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "F_oracleHI_flat": {
       "APR": {
-        "point": 1.0,
-        "ci95_low": 1.0,
+        "point": 0.9647,
+        "ci95_low": 0.9176,
         "ci95_high": 1.0
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "G_oracleHI_prov": {
       "APR": {
-        "point": 1.0,
-        "ci95_low": 1.0,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "H_oracleMED_flat": {
       "APR": {
-        "point": 0.8182,
-        "ci95_low": 0.6364,
-        "ci95_high": 0.9545
+        "point": 0.3647,
+        "ci95_low": 0.2588,
+        "ci95_high": 0.4706
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "I_oracleMED_prov": {
       "APR": {
-        "point": 0.9091,
-        "ci95_low": 0.7727,
-        "ci95_high": 1.0
+        "point": 0.8353,
+        "ci95_low": 0.7529,
+        "ci95_high": 0.9059
       },
       "BCR": {
-        "point": 0.9333,
-        "ci95_low": 0.8,
+        "point": 0.9882,
+        "ci95_low": 0.9647,
         "ci95_high": 1.0
       }
     },
     "J_ml_flat": {
       "APR": {
-        "point": 1.0,
-        "ci95_low": 1.0,
-        "ci95_high": 1.0
+        "point": 0.9412,
+        "ci95_low": 0.8824,
+        "ci95_high": 0.9882
       },
       "BCR": {
-        "point": 0.8,
-        "ci95_low": 0.6,
-        "ci95_high": 1.0
+        "point": 0.8824,
+        "ci95_low": 0.8118,
+        "ci95_high": 0.9412
       }
     },
     "K_ml_prov": {
       "APR": {
-        "point": 1.0,
-        "ci95_low": 1.0,
+        "point": 0.9647,
+        "ci95_low": 0.9176,
         "ci95_high": 1.0
       },
       "BCR": {
-        "point": 0.6,
-        "ci95_low": 0.3333,
-        "ci95_high": 0.8667
+        "point": 0.7882,
+        "ci95_low": 0.6941,
+        "ci95_high": 0.8706
       }
     }
   }

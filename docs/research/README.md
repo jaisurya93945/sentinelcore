@@ -319,3 +319,59 @@ It does **not** invalidate the mechanisms, which rest on causal diagnosis rather
 It does mean the **numbers should not be quoted as measured effect sizes**. They are directional, with named mechanisms, on an underpowered benchmark.
 
 **The single highest-value extension to this work is therefore not a new mechanism — it is 5–10× more agent traces.** That is a tractable, unglamorous, and necessary next step, and it is identified here rather than deferred to a vague "future work" line.
+
+---
+
+# v2 Benchmark: 170 traces with externally-authored payloads
+
+The statistical validation above concluded that the highest-value next step was not a new mechanism but more traces. This is that work.
+
+## What changed, and why it matters for validity
+
+The v1 benchmark had two weaknesses, both stated in the paper: self-authorship (scenarios written by the same author as the system) and small n. Both are addressed by sourcing **payload text from the held-out test split** of the public datasets (deepset, pr1m8). That text is externally authored, independently labelled, and held out from the classifier's training *and* threshold selection. We contribute only the structure: which provenance vector carries the payload, and what action follows.
+
+**170 traces (85 attack / 85 benign); 149 carry externally-sourced payloads, 21 are authored.** The 21 are structural attacks (destructive tool calls with clean arguments, exfiltration via tool arguments) and hard benign cases — neither has textual payload to borrow, because the attack *is* the action. They are flagged `authored: true` so their contribution can be separated.
+
+Each held-out text is used in **exactly one trace**. Reusing payloads across delivery vectors would have inflated n while producing correlated samples and falsely narrow CIs.
+
+## Results (n=85/85, bootstrap 95% CIs)
+
+| Config | APR [95% CI] | BCR [95% CI] |
+|---|---|---|
+| A rules | 0.282 [0.188, 0.377] | 1.000 [1.000, 1.000] |
+| B + prov. scoring | 0.306 [0.212, 0.400] | 1.000 [1.000, 1.000] |
+| C + tool authz | 0.365 [0.259, 0.471] | 0.988 [0.965, 1.000] |
+| E + prov. rules | 0.400 [0.294, 0.506] | 0.988 [0.965, 1.000] |
+| H oracle(MED) | 0.365 [0.259, 0.471] | 0.988 [0.965, 1.000] |
+| **I oracle(MED) + prov.** | **0.835 [0.753, 0.906]** | 0.988 [0.965, 1.000] |
+| **J learned** | **0.941 [0.882, 0.988]** | 0.882 [0.812, 0.941] |
+| K learned + prov. | 0.965 [0.918, 1.000] | 0.788 [0.694, 0.871] |
+
+CIs narrowed from roughly ±18 points to ±10, and several comparisons now resolve.
+
+## What is now statistically significant
+
+**Detection dominance.** A (0.282 [0.188, 0.377]) vs J (0.941 [0.882, 0.988]) — intervals nowhere near overlapping. Swapping the detector moves attack prevention by 66 points. No policy mechanism came close.
+
+**The oracle effect.** H (0.365 [0.259, 0.471]) vs I (0.835 [0.753, 0.906]) — **non-overlapping**. Under a ground-truth detector at ambiguous confidence, provenance adds **+47.0 points**, and that is now a real measured effect rather than a suggestive one.
+
+## What is still not significant
+
+**Provenance's benefit with a real detector.** J (0.941) vs K (0.965): +2.4 points, intervals overlap substantially. Its utility cost (BCR 0.882 → 0.788) is borderline — [0.812, 0.941] against [0.694, 0.871] barely overlap at the edges.
+
+**Provenance over rules-based detection.** A→B (+2.4) and C→E (+3.5) both overlap. Note these are now *non-zero*, where v1 measured them at exactly zero; a harder benchmark gives provenance slightly more to work with, but not enough to resolve.
+
+## Finding 5, strengthened by roughly an order of magnitude
+
+The v1 conclusion was that oracle evaluation overstates provenance: +9.1 points under oracle versus 0 with a real detector. On a larger benchmark with externally-authored payloads, the same comparison is:
+
+- **Oracle: +47.0 points, statistically significant, zero utility cost.**
+- **Real detector: +2.4 points, not significant, at a ~9 point utility cost.**
+
+That is roughly a **20× overstatement**, and the significance now runs the right way round: the misleading result is the one that is statistically solid, and the real-world result is the one that vanishes into noise. An evaluation that reported only the oracle number would present a large, significant, apparently free improvement for a mechanism that, against a real detector, buys nothing measurable and costs utility.
+
+This is the paper's central claim, and it is now demonstrated on a benchmark whose attack text we did not write.
+
+## A bug found while doing this
+
+The first v2 ablation run showed the oracle configurations scoring *below* the learned classifier — impossible for a ground-truth detector. Cause: the v2 builder did not emit the `oracle_malicious` flag the oracle reads, so it silently saw nothing and the F–I configurations were meaningless. Fixed by marking the payload-carrying event, with structural attacks deliberately left unmarked (their payload is an action with clean text, invisible to any content detector by construction). Recorded because the failure was silent — the configurations produced plausible-looking numbers rather than an error.
