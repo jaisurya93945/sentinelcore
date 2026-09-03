@@ -84,3 +84,62 @@ Three new prompt_injection patterns (fake authority tags, hidden secondary instr
 - Detector-level "any finding = predicted malicious" is a proxy, not identical to "the gateway would have stopped this."
 - Both source datasets skew toward classic/well-known attack phrasing; real-world adversarial traffic may differ.
 - No formal train/validation/held-out split exists yet -- everything here is one evaluation set, re-run after every detector change. A held-out set that's never used for pattern development is a real, tracked gap (`docs/hardening/STATUS.md`, section 31).
+
+---
+
+# Agent-Trace Ablation Study
+
+The first action-level experiment in this project. Reproduce with:
+
+```bash
+python scripts/build_agent_traces.py
+python scripts/run_ablation.py
+```
+
+## Why a second benchmark exists
+
+The 744-example text benchmark scans every example as `input` origin. When provenance-aware scoring was added, re-running it produced **exactly 0.00% change** on every metric — not because provenance does nothing, but because that benchmark is *structurally incapable* of varying provenance. Measuring whether an unsafe **action** is prevented requires an event trace, not a labeled sentence.
+
+## What this benchmark is, and is not
+
+37 deterministic agent traces (22 attack, 15 benign) replayed through the pipeline. **It does not run a live LLM.** The claim "the unsafe action in this trace was blocked" is strictly weaker than "an agent driven by a real model was stopped." It is a bridge to a real agent benchmark (AgentDojo), not a substitute.
+
+**Threat to validity, stated plainly:** these scenarios were authored by the same author as the system under test, which systematically favors the system. Three partial mitigations: attack categories come from published taxonomies rather than from what SentinelCore catches; 9 scenarios are deliberately included that the system is *expected to fail* (paraphrased injection, non-English, semantic-only attacks, legitimate destructive operations); and hard benign cases are included so utility cost is measured rather than assumed. **If APR were 100%, the benchmark would be broken.** It is 81.8%.
+
+Prevention counts only `BLOCK` / `SANITIZE` / `HUMAN_APPROVAL`. `WARN` is excluded deliberately — a warning stops nothing, and counting it as prevention is the same "decision reported as enforcement" error this project treats as a correctness bug.
+
+## Results
+
+| Config | Mechanisms | APR | BCR |
+|---|---|---|---|
+| A content-only | detectors + risk + policy | 72.7% | 100.0% |
+| B + provenance | origin trust scaling | **72.7%** | 100.0% |
+| C + tool authz | tool-name authorization | **81.8%** | 93.3% |
+| D full | both | 81.8% | 93.3% |
+
+Attack prevention by category:
+
+| Category | A | B | C | D |
+|---|---|---|---|---|
+| compositional | 75% | 75% | **100%** | 100% |
+| unauthorized_tool | 75% | 75% | **100%** | 100% |
+| direct_injection | 60% | 60% | 60% | 60% |
+| indirect_injection | 75% | 75% | 75% | 75% |
+| mcp_poisoning | 67% | 67% | 67% | 67% |
+| exfiltration | 100% | 100% | 100% | 100% |
+
+## Finding 1 — tool authorization is the component that causes the improvement
+
++9.1pp APR, and the category breakdown shows *why*: the gain is entirely in `compositional` and `unauthorized_tool` (both 75% → 100%), exactly the categories where the attack is a privileged action with clean-looking arguments. Content scanning cannot catch `database.delete(table="logs")` — there is nothing malicious in the text. Only deterministic name-based authorization stops it.
+
+This is a real security/utility trade-off, not a free win: BCR drops 100% → 93.3%. The cost is a specific, identified scenario (BN-009: a user legitimately deleting an out-of-retention table) that the tool policy blocks. That is the correct behavior for the configured policy and a genuine usability cost, reported rather than hidden.
+
+## Finding 2 — NEGATIVE RESULT: provenance scoring is subsumed by categorical policy
+
+**Provenance-aware risk scoring produced no measurable improvement (A → B: 72.7% → 72.7%; C → D: 81.8% → 81.8%).** This is reported as a null result rather than dropped.
+
+Diagnosed cause, verified directly: provenance altered the decision in only 3 of 37 scenarios, and never in a way that changed an outcome. The policy engine applies **categorical per-finding-type rules before score thresholds**, and `instruction_override: block` fires regardless of score. On a poisoned RAG document the score rises 62 → 92 with provenance enabled — and the decision is `block` either way.
+
+**Design implication:** provenance is being applied at the wrong layer. Scaling a number that a categorical rule overrides cannot change behavior. To matter, provenance must condition the *policy rule itself* (`instruction_override` from `context:N` → block, from `input` → warn), not the score feeding a threshold that never gets consulted. That is a concrete, testable next experiment, and it exists because this ablation was run rather than assumed.
+
+The mechanism is retained (with `use_origin_trust=False` as the control) because the ablation is only re-runnable if both conditions remain available.
