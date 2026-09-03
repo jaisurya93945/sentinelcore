@@ -40,7 +40,7 @@ Status values: **DONE** (implemented and tested) · **PARTIAL** (real, with a st
 | 32 | Dataset provenance | DONE | `dataset/README.md`, `docs/research/README.md` |
 | 33 | Evaluation, historical baseline preserved | DONE | v0.1/v0.2/v0.3 replay snapshots kept, never overwritten — and independently re-verified byte-for-byte after a sandbox reset |
 | 34 | Ablation studies | **DONE** | 11-config causal ablation over an agent-trace benchmark (`scripts/run_ablation.py`). Produced 5 findings including two null results and one that overturned an earlier conclusion. `docs/research/README.md` |
-| 35 | Semantic/ML detection | DECLINED for now | The deterministic-failure analysis this section asks for already exists (17.68% recall ceiling, documented false negatives) |
+| 35 | Semantic/ML detection | **PARTIAL — real, benchmarked, shipped off-by-default** | Learned lexical classifier (TF-IDF + calibrated logistic regression), `app/detectors/ml_classifier/`. Head-to-head on an identical held-out split (`scripts/compare_baselines.py`): recall 27.54% -> 85.51% (3.10x), precision 100.00% -> 93.65%, FPR 0.00% -> 5.00%. Not a transformer and not claimed to be. Its measured cost drove a policy change (Finding 5): the provenance-escalation rules it would have shipped with were removed after the ablation showed them net-negative |
 | 36 | Future custom LLM | DECLINED, per the doc's own instruction | Explicitly out of scope for a hardening phase |
 | 37 | Security testing (SAST etc.) | PARTIAL | Dependency scanning yes. SAST, secret scanning, fuzzing: not added |
 | 38 | Threat model | PARTIAL | Covers every implemented detector in depth. Broader categories (insider threats, compromised dependencies) not yet added as their own entries |
@@ -55,7 +55,9 @@ Status values: **DONE** (implemented and tested) · **PARTIAL** (real, with a st
 
 ## Reading this table honestly
 
-10 sections DONE, 15 PARTIAL, 6 DECLINED with stated reasoning, 8 NOT YET ATTEMPTED, 3 N/A or ongoing, 4 correctly deferred until later sections are further along. That's not "hardening complete" — it's an honest snapshot of a real, incremental effort, exactly as Section 46 asks for.
+Counts drift as work lands; recount from the table rather than trusting this paragraph. As of the last update: 11 DONE, 17 PARTIAL, 5 DECLINED with stated reasoning, 6 NOT YET ATTEMPTED, the remainder N/A or ongoing. That is not "hardening complete" — it is an honest snapshot of an incremental effort, exactly as Section 46 asks for.
+
+Two rows moved recently and are worth naming, because both moved on evidence rather than effort: **§34 ablation studies** went NOT ATTEMPTED → DONE, and **§35 semantic/ML detection** went DECLINED → PARTIAL. §35 had been declined on the reasoning that building and fairly evaluating a semantic detector was too large for a hardening pass. That turned out to be wrong: a learned lexical classifier trained on the existing dataset was achievable, and it produced the project's largest single security improvement. The earlier judgement is left visible in the git history rather than quietly overwritten.
 
 ## Reconstruction note
 
