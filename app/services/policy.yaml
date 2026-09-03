@@ -1,0 +1,36 @@
+# Default SentinelCore policy.
+# Two layers, most-severe-decision-wins -- see policy_engine.py.
+version: 1
+
+rules:
+  instruction_override: block
+  role_manipulation: block
+  system_prompt_extraction: warn
+  mixed_script_homoglyph: warn
+  encoded_payload_suspected: warn
+  entity_encoding_obfuscation: warn
+  zero_width_characters: sanitize
+  bidi_control_characters: sanitize
+  unusual_whitespace: sanitize
+  control_characters: sanitize
+  character_spacing_evasion: sanitize
+  # Secrets: unambiguous credentials -- no safe partial fix, block outright.
+  aws_access_key: block
+  private_key: block
+  generic_api_key: block
+  db_connection_string: block
+  jwt_token: warn
+  bearer_token: warn
+  # PII: sensitive identifiers block; common/low-stakes fields warn --
+  # blocking every email mention would make the gateway useless for
+  # ordinary support/contact use cases.
+  ssn: block
+  credit_card: block
+  email_address: warn
+  phone_number: warn
+  ip_address: warn
+
+thresholds:
+  block: 70
+  sanitize: 50
+  warn: 25
