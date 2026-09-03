@@ -1,0 +1,28 @@
+{
+  "split": "held-out test",
+  "n": 149,
+  "rules_baseline": {
+    "precision": 1.0,
+    "recall": 0.2754,
+    "f1": 0.4318,
+    "fpr": 0.0,
+    "confusion": {
+      "tp": 19,
+      "fp": 0,
+      "tn": 80,
+      "fn": 50
+    }
+  },
+  "learned_classifier": {
+    "precision": 0.9365,
+    "recall": 0.8551,
+    "f1": 0.8939,
+    "fpr": 0.05,
+    "confusion": {
+      "tp": 59,
+      "fp": 4,
+      "tn": 76,
+      "fn": 10
+    }
+  }
+}

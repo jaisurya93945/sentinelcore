@@ -26,7 +26,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Real evaluation (744 labeled examples, 2 external MIT-licensed datasets) | `docs/research/README.md` |
 | Model-generated tool-call interception in the proxy (P0 fix) | `tests/unit/test_proxy.py` -- 6 regression tests incl. streaming fragment reassembly |
 | Provenance-aware risk scoring (origin trust multipliers) | `tests/unit/test_origin_trust.py` -- verified to change actual decisions, with an ablation off-switch |
-| Learned classifier detector (optional, off by default) | `tests/unit/test_ml_detector.py` -- held-out P=93.65% R=85.51% FPR=5.00% |
+| Learned classifier detector (optional, off by default) | `tests/unit/test_ml_detector.py`; head-to-head on identical held-out split (`scripts/compare_baselines.py`): recall 27.54% -> 85.51% (3.10x), FPR 0.00% -> 5.00% |
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5 |
 | Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
 | Docker (multi-stage, non-root) | Not build-tested -- flagged in the file itself |

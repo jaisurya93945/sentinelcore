@@ -241,7 +241,7 @@ Running the full 744-example evaluation after this change produced **exactly zer
 
 **Module:** `app/detectors/ml_classifier/`, trained by `scripts/train_ml_detector.py`
 
-TF-IDF (word 1-2 + char 3-5 grams) into a calibrated logistic regression. Held-out test: **P=93.65% R=85.51% F1=89.39% FPR=5.00% AUC=0.964**, against the rules baseline's 17.68% recall at 0.50% FPR. Stratified seeded 60/20/20 split; the test split is touched once and never used for threshold selection.
+TF-IDF (word 1-2 + char 3-5 grams) into a calibrated logistic regression. Held-out test: **P=93.65% R=85.51% F1=89.39% FPR=5.00% AUC=0.964**, against the rules baseline **measured on the identical split**: 27.54% recall, 100.00% precision, 0.00% FPR — a 3.10x recall improvement at a real precision cost. (The 17.68% figure is the baseline over all 744 examples and is not comparable to a split-based number.) Stratified seeded 60/20/20 split; the test split is touched once and never used for threshold selection.
 
 **It is a learned LEXICAL classifier, not a transformer and not semantic understanding.** It generalises within training vocabulary and inherits that data's language bias. Calling it "AI-powered semantic detection" would be false.
 

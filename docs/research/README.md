@@ -228,7 +228,9 @@ It is a **learned lexical** classifier — not a transformer, not semantic under
 | validation | 89.86% | 89.86% | 89.86% | 8.75% | 0.966 |
 | **held-out test** | **93.65%** | **85.51%** | **89.39%** | **5.00%** | **0.964** |
 
-Recall against the hand-written regex baseline: **17.68% → 85.51%**, a 4.8× improvement, at an FPR cost of 0.50% → 5.00%.
+Recall against the hand-written regex baseline: **27.54% → 85.51% on the identical held-out split**, a **3.10×** improvement, at a precision cost of 100.00% → 93.65% and FPR 0.00% → 5.00%.
+
+> **Correction.** This was originally reported as 17.68% → 85.51%, a 4.8× improvement. That was an invalid comparison: 17.68% is the rules baseline over all 744 examples, while 85.51% is the classifier on the 149-example held-out split — different datasets. Measured on identical data (`scripts/compare_baselines.py`) the baseline scores 27.54%, and the real improvement is 3.10×. The error was caught while drafting the paper and is recorded rather than silently corrected.
 
 ## The result
 
@@ -260,7 +262,7 @@ The oracle had **zero false positives by construction**. That is precisely the a
 
 ## Corrected synthesis
 
-1. **Detection recall is the binding constraint.** Quantified: 17.68% → 85.51% recall moves APR 81.8% → 100%. No policy mechanism produced a comparable gain.
+1. **Detection recall is the binding constraint.** Quantified on identical held-out data: 27.54% → 85.51% recall moves APR 81.8% → 100%. No policy mechanism produced a comparable gain.
 2. **Provenance-aware escalation is not free.** Its value depends entirely on detector **precision within the ambiguous band**, not on the existence of ambiguity. With a perfectly precise detector it is a pure win; with a realistic one it is a net loss.
 3. **Oracle experiments systematically overstate provenance mechanisms.** This is a methodological result, and it applies beyond this codebase: any evaluation that grants a defense ground-truth detection will overstate the value of anything layered on top of it, because the layer's cost is paid in false positives the oracle cannot produce.
 
