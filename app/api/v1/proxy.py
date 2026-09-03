@@ -21,10 +21,11 @@ from app.core.auth import Role, require_role
 from app.detectors.registry import get_registered_detectors
 from app.models.finding import Decision, EnforcementStatus, Finding
 from app.services.audit_log import log_scan_event
-from app.services.policy_engine import decide
+from app.services.policy_engine import decide, most_severe
 from app.services.proxy import forward_to_upstream, stream_lines_from_upstream
 from app.services.risk_engine import calculate_risk_score
 from app.services.sanitizer import enforce_sanitize
+from app.services.tool_policy import authorize_tool
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -81,6 +82,69 @@ def _extract_assistant_text(upstream_content: bytes) -> str | None:
         return content if isinstance(content, str) else None
     except (json.JSONDecodeError, KeyError, IndexError, TypeError):
         return None
+
+
+def _extract_tool_calls(upstream_content: bytes) -> list[dict]:
+    """
+    Extracts model-generated tool calls from an OpenAI-shaped response.
+
+    This exists because of a real, reproduced vulnerability: the proxy
+    previously scanned only `message.content`, which is `null` whenever the
+    model emits a tool call instead of prose. A response carrying
+    `tool_calls: [{function: {name: "shell.execute", arguments:
+    "{\\"command\\": \\"rm -rf /\\"}"}}]` passed through with decision
+    "allow" -- every model-generated action bypassed the security pipeline
+    entirely, even though a working tool-call scanner already existed at
+    /api/v1/scan/tool-call. The gateway simply never routed to it.
+
+    Handles both the modern `tool_calls` array and the legacy
+    `function_call` object, since real clients still emit both.
+    """
+    try:
+        body = json.loads(upstream_content)
+        message = body["choices"][0]["message"]
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return []
+
+    calls: list[dict] = []
+
+    for call in message.get("tool_calls") or []:
+        if not isinstance(call, dict):
+            continue
+        fn = call.get("function") or {}
+        if isinstance(fn, dict) and fn.get("name"):
+            calls.append({"name": fn["name"], "arguments": fn.get("arguments") or ""})
+
+    legacy = message.get("function_call")
+    if isinstance(legacy, dict) and legacy.get("name"):
+        calls.append({"name": legacy["name"], "arguments": legacy.get("arguments") or ""})
+
+    return calls
+
+
+def _scan_tool_calls(tool_calls: list[dict]) -> tuple[list[Finding], Decision]:
+    """
+    Applies the same two independent checks as /api/v1/scan/tool-call:
+    deterministic tool-NAME authorization (outside the model's control) and
+    content scanning of the serialized arguments. Most-severe-wins across
+    every call in the response -- one unauthorized call is enough to
+    condemn the whole response, since the client would otherwise execute it.
+    """
+    if not tool_calls:
+        return [], Decision.ALLOW
+
+    all_findings: list[Finding] = []
+    decisions: list[Decision] = []
+
+    for call in tool_calls:
+        name = call["name"]
+        decisions.append(authorize_tool(name))
+
+        arg_findings = _scan_text(str(call["arguments"]), origin=f"tool_arguments:{name}")
+        all_findings.extend(arg_findings)
+        decisions.append(decide(arg_findings, calculate_risk_score(arg_findings)))
+
+    return all_findings, most_severe(decisions)
 
 
 def _substitute_latest_user_message(body: dict, sanitized_text: str) -> bytes:
@@ -145,6 +209,12 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
       isn't implemented in v1.
     """
     accumulated_text = ""
+    # Tool call arguments stream as FRAGMENTS across chunks (OpenAI sends
+    # partial JSON in delta.tool_calls[].function.arguments), so scanning a
+    # single chunk is meaningless -- '{"command": "rm -' matches nothing.
+    # They're accumulated per index and re-scanned as they grow, which is
+    # what makes mid-stream action blocking possible at all.
+    accumulated_tool_calls: dict[int, dict] = {}
     last_findings: list[Finding] = []
     last_risk_score = 0
     last_decision = Decision.ALLOW
@@ -160,17 +230,37 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
             yield "data: [DONE]\n\n"
             break
 
+        delta_content = ""
         try:
             chunk = json.loads(data_str)
-            delta_content = chunk["choices"][0]["delta"].get("content", "")
+            delta = chunk["choices"][0]["delta"]
+            delta_content = delta.get("content", "") or ""
+
+            for tc in delta.get("tool_calls") or []:
+                idx = tc.get("index", 0)
+                slot = accumulated_tool_calls.setdefault(idx, {"name": "", "arguments": ""})
+                fn = tc.get("function") or {}
+                if fn.get("name"):
+                    slot["name"] = fn["name"]
+                if fn.get("arguments"):
+                    slot["arguments"] += fn["arguments"]
         except (json.JSONDecodeError, KeyError, IndexError, TypeError):
             delta_content = ""
 
-        if delta_content:
-            accumulated_text += delta_content
-            last_findings = _scan_text(accumulated_text, origin="output")
-            last_risk_score = calculate_risk_score(last_findings)
-            last_decision = decide(last_findings, last_risk_score)
+        if delta_content or accumulated_tool_calls:
+            if delta_content:
+                accumulated_text += delta_content
+
+            content_findings = _scan_text(accumulated_text, origin="output") if accumulated_text else []
+            content_score = calculate_risk_score(content_findings)
+            content_decision = decide(content_findings, content_score)
+
+            named_calls = [c for c in accumulated_tool_calls.values() if c["name"]]
+            tool_findings, tool_decision = _scan_tool_calls(named_calls)
+
+            last_findings = content_findings + tool_findings
+            last_risk_score = max(content_score, calculate_risk_score(tool_findings))
+            last_decision = most_severe([content_decision, tool_decision])
 
             if last_decision == Decision.BLOCK:
                 yield 'data: {"choices":[{"delta":{},"finish_reason":"content_filter","index":0}]}\n\n'
@@ -250,8 +340,24 @@ async def chat_completions(request: Request):
     assistant_text = _extract_assistant_text(upstream_response.content)
     output_findings = _scan_text(assistant_text, origin="output") if assistant_text else []
     output_risk_score = calculate_risk_score(output_findings)
-    output_decision = decide(output_findings, output_risk_score)
-    log_scan_event(scan_id, "proxy_output", output_risk_score, output_decision.value, output_findings)
+    content_decision = decide(output_findings, output_risk_score)
+
+    # Model-generated tool calls are actions, not prose -- they get the full
+    # authorization + argument-scanning pipeline, not just text scanning.
+    tool_calls = _extract_tool_calls(upstream_response.content)
+    tool_findings, tool_decision = _scan_tool_calls(tool_calls)
+    output_findings = output_findings + tool_findings
+    output_risk_score = max(output_risk_score, calculate_risk_score(tool_findings))
+    output_decision = most_severe([content_decision, tool_decision])
+
+    log_scan_event(
+        scan_id,
+        "proxy_output",
+        output_risk_score,
+        output_decision.value,
+        output_findings,
+        detail=",".join(c["name"] for c in tool_calls) or None,
+    )
 
     if output_decision == Decision.BLOCK:
         return _blocked_response(output_findings, output_risk_score, output_decision, stage="output")
