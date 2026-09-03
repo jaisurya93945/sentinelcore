@@ -210,3 +210,58 @@ Three regimes, each measured:
 Provenance-aware policy is neither useless nor a general win. It occupies a **narrow, identifiable band**: detections that fired but are not individually conclusive. That is a precise, falsifiable characterisation, and it directly explains why the published literature reports large gains from provenance/authority mechanisms — those systems pair provenance with detection that produces abundant ambiguous signal (taint tracking, model-based classification), placing them squarely in the third regime. A lexical detector spends most of its time in the first.
 
 **The actionable consequence for this project is unchanged and now quantified: detection recall is the binding constraint.** Under an oracle, APR reaches 100%; the real system reaches 81.8%. The entire 18.2pp gap is detection, not policy.
+
+---
+
+# Finding 5 — the oracle was misleading, and that is the most important result
+
+Finding 4 concluded, from an oracle experiment, that provenance delivers +9.1pp APR at **zero utility cost**. Replacing the oracle with a real learned detector shows that conclusion was an artifact of how the oracle was built.
+
+## The detector
+
+TF-IDF (word 1-2 grams + character 3-5 grams) into a calibrated logistic regression, trained on the same 744-example dataset under a **stratified, seeded 60/20/20 train/validation/test split**. The test split was used once, at the end; confidence bands were chosen on validation. This also closes a gap flagged earlier in this document: the project previously had no held-out set at all.
+
+It is a **learned lexical** classifier — not a transformer, not semantic understanding. It generalises within vocabulary and inherits the training data's language bias. What matters for this experiment is a property regex lacks: it emits a probability, so it can express uncertainty.
+
+| Split | Precision | Recall | F1 | FPR | AUC |
+|---|---|---|---|---|---|
+| validation | 89.86% | 89.86% | 89.86% | 8.75% | 0.966 |
+| **held-out test** | **93.65%** | **85.51%** | **89.39%** | **5.00%** | **0.964** |
+
+Recall against the hand-written regex baseline: **17.68% → 85.51%**, a 4.8× improvement, at an FPR cost of 0.50% → 5.00%.
+
+## The result
+
+| Config | Detector | Provenance | APR | BCR |
+|---|---|---|---|---|
+| C | regex | no | 81.8% | 93.3% |
+| H | oracle (MED) | no | 81.8% | 93.3% |
+| I | oracle (MED) | **yes** | 90.9% | **93.3%** |
+| J | **learned** | no | **100.0%** | 80.0% |
+| K | **learned** | **yes** | **100.0%** | **60.0%** |
+
+**Detection recall was indeed the binding constraint** — the learned detector reaches 100% attack prevention, matching the oracle, and lifts every previously-failing category (direct_injection 60→100%, indirect_injection 75→100%, mcp_poisoning 67→100%).
+
+**But provenance is net-negative with a real detector: 0pp APR gain, −20pp benign completion.**
+
+## Why the oracle lied
+
+Under J, the classifier fires at ambiguous confidence on benign external content and the flat rule warns — harmless, the workflow completes. Under K, the origin rule escalates that same uncertain finding to `block` because it arrived from `context`. Three entirely ordinary workflows are destroyed:
+
+| Scenario | Content | J | K |
+|---|---|---|---|
+| BN-002 | "Summarize the quarterly report" + normal revenue doc | warn | **block** |
+| BN-006 | "What does our onboarding doc say about laptops?" | warn | **block** |
+| BN-015 | "Search for recent papers on RAG" | warn | **block** |
+
+**Provenance converted the classifier's false positives into hard blocks.** A 5% FPR is tolerable when uncertain findings only warn. It is not tolerable when provenance escalates uncertainty on external content — and in an agent system, *most* content is external.
+
+The oracle had **zero false positives by construction**. That is precisely the assumption that fails in reality, and it is the assumption that made provenance look free.
+
+## Corrected synthesis
+
+1. **Detection recall is the binding constraint.** Quantified: 17.68% → 85.51% recall moves APR 81.8% → 100%. No policy mechanism produced a comparable gain.
+2. **Provenance-aware escalation is not free.** Its value depends entirely on detector **precision within the ambiguous band**, not on the existence of ambiguity. With a perfectly precise detector it is a pure win; with a realistic one it is a net loss.
+3. **Oracle experiments systematically overstate provenance mechanisms.** This is a methodological result, and it applies beyond this codebase: any evaluation that grants a defense ground-truth detection will overstate the value of anything layered on top of it, because the layer's cost is paid in false positives the oracle cannot produce.
+
+Finding 4 is superseded. It is retained above, unedited, because the sequence — oracle result, contradicting real-detector result, diagnosis — is the actual contribution.

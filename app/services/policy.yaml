@@ -30,6 +30,10 @@ rules:
   phone_number: warn
   ip_address: warn
   oracle_injection: warn
+  # Learned-classifier findings default to WARN: a probabilistic detector
+  # firing is not on its own grounds to block, which is precisely why
+  # provenance has something to decide.
+  ml_injection: warn
 
 # Origin-conditioned rules, checked BEFORE the flat rules above.
 # Key format: <finding_type>@<origin_prefix>
@@ -60,6 +64,11 @@ origin_rules:
   oracle_injection@tool_description: block
   oracle_injection@tool_arguments: block
   oracle_injection@input: warn
+  ml_injection@context: block
+  ml_injection@tool_response: block
+  ml_injection@tool_description: block
+  ml_injection@tool_arguments: block
+  ml_injection@input: warn
   # Someone else's text telling the model what to do -- always block.
   system_prompt_extraction@context: block
   system_prompt_extraction@tool_response: block

@@ -1,0 +1,27 @@
+{
+  "seed": 20260903,
+  "sizes": {
+    "train": 446,
+    "val": 149,
+    "test": 149
+  },
+  "validation": {
+    "precision": 0.8986,
+    "recall": 0.8986,
+    "f1": 0.8986,
+    "fpr": 0.0875,
+    "roc_auc": 0.9656
+  },
+  "test_heldout": {
+    "precision": 0.9365,
+    "recall": 0.8551,
+    "f1": 0.8939,
+    "fpr": 0.05,
+    "roc_auc": 0.9636
+  },
+  "confidence_distribution_test": {
+    "low_<0.35": 79,
+    "ambiguous_0.35-0.70": 18,
+    "high_>=0.70": 52
+  }
+}

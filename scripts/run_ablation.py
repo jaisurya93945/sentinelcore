@@ -71,7 +71,49 @@ CONFIGS = {
     # MEDIUM severity = ambiguous signal, leaves headroom for provenance.
     "H_oracleMED_flat": {"provenance": False, "tool_authz": True, "origin_rules": False, "oracle": Severity.MEDIUM},
     "I_oracleMED_prov": {"provenance": True, "tool_authz": True, "origin_rules": True, "oracle": Severity.MEDIUM},
+    # REAL learned detector replacing the oracle -- tests Finding 4
+    # outside simulation.
+    "J_ml_flat": {"provenance": False, "tool_authz": True, "origin_rules": False, "ml": True},
+    "K_ml_prov": {"provenance": True, "tool_authz": True, "origin_rules": True, "ml": True},
 }
+
+
+_ML_MODEL = None
+
+
+def _ml_findings(text: str, origin: str) -> list[Finding]:
+    """
+    Real learned detector (TF-IDF -> calibrated logistic regression),
+    replacing the ground-truth oracle. Probability is mapped to severity
+    so the detector expresses UNCERTAINTY rather than a binary hit --
+    the property Finding 4 identifies as the precondition for provenance
+    to matter.
+
+        p >= 0.70  -> HIGH    (confident)
+        p >= 0.35  -> MEDIUM  (ambiguous -- the regime under test)
+        p <  0.35  -> no finding
+
+    Bands were chosen on the VALIDATION split, never the held-out test.
+    """
+    global _ML_MODEL
+    if _ML_MODEL is None:
+        import joblib
+
+        _ML_MODEL = joblib.load(Path(__file__).parent.parent / "dataset" / "processed" / "ml_detector.joblib")
+
+    p = float(_ML_MODEL.predict_proba([text])[0][1])
+    if p < 0.35:
+        return []
+    sev = Severity.HIGH if p >= 0.70 else Severity.MEDIUM
+    f = Finding(
+        detector="ml_classifier",
+        type="ml_injection",
+        description=f"learned classifier flagged content (p={p:.2f})",
+        severity=sev,
+        confidence=round(p, 4),
+    )
+    f.origin = origin
+    return [f]
 
 
 def _oracle_findings(ev: dict, origin: str, severity: Severity) -> list[Finding]:
@@ -111,7 +153,7 @@ def _scan(text: str, origin: str) -> list[Finding]:
     return findings
 
 
-def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False, oracle: Severity | None = None) -> Decision:
+def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False, oracle: Severity | None = None, ml: bool = False) -> Decision:
     """Replays one trace, returning the most severe decision reached."""
     decisions: list[Decision] = []
     doc_index = 0
@@ -145,6 +187,9 @@ def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origi
 
         if oracle:
             findings = findings + _oracle_findings(ev, origin, oracle)
+        if ml:
+            text_for_ml = ev.get("text") or json.dumps(ev.get("arguments", {}))
+            findings = findings + _ml_findings(text_for_ml, origin)
 
         score = calculate_risk_score(findings, use_origin_trust=provenance)
         local.append(decide(findings, score, use_origin_rules=origin_rules))
@@ -170,7 +215,7 @@ def main():
         by_category = defaultdict(lambda: {"total": 0, "prevented": 0})
 
         for s in attacks:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"))
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"), cfg.get("ml", False))
             ok = d in BLOCKING
             prevented += ok
             by_category[s["category"]]["total"] += 1
@@ -178,7 +223,7 @@ def main():
             per_scenario[s["id"]][cfg_name] = d.value
 
         for s in benign:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"))
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"), cfg.get("ml", False))
             ok = d not in BLOCKING
             completed += ok
             per_scenario[s["id"]][cfg_name] = d.value
