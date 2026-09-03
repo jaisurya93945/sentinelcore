@@ -1,0 +1,6 @@
+# Optional: the learned classifier detector (OFF by default).
+# Enabling costs a 10x false-positive increase -- see
+# app/detectors/ml_classifier/detector.py and docs/research/README.md.
+-r requirements.txt
+scikit-learn>=1.4.0
+joblib>=1.3.0

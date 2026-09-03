@@ -36,10 +36,10 @@ Status values: **DONE** (implemented and tested) · **PARTIAL** (real, with a st
 | 28 | Real provider validation | DECLINED, not achievable here | No network access to real LLM providers and no API key in this sandbox |
 | 29 | Load/performance testing | DECLINED, not achievable with integrity | No realistic load-testing environment here |
 | 30 | Chaos/failure testing | PARTIAL | Audit-log-failure-never-breaks-a-request: tested. Detector/policy exception handling: not tested — directly related to the Section 8 gap above |
-| 31 | Security regression corpus | PARTIAL | 744 real examples + Attack Replay Lab exist. No formal train/validation/held-out split |
+| 31 | Security regression corpus | **PARTIAL — improved** | 744 text examples + 37 agent traces + Attack Replay Lab. Stratified seeded 60/20/20 train/val/**held-out test** split now exists (`dataset/processed/splits.json`); test split used once. Agent traces are self-authored — stated threat to validity |
 | 32 | Dataset provenance | DONE | `dataset/README.md`, `docs/research/README.md` |
 | 33 | Evaluation, historical baseline preserved | DONE | v0.1/v0.2/v0.3 replay snapshots kept, never overwritten — and independently re-verified byte-for-byte after a sandbox reset |
-| 34 | Ablation studies | NOT YET ATTEMPTED | Real, achievable candidate — all the pieces already exist in `scripts/evaluate.py` |
+| 34 | Ablation studies | **DONE** | 11-config causal ablation over an agent-trace benchmark (`scripts/run_ablation.py`). Produced 5 findings including two null results and one that overturned an earlier conclusion. `docs/research/README.md` |
 | 35 | Semantic/ML detection | DECLINED for now | The deterministic-failure analysis this section asks for already exists (17.68% recall ceiling, documented false negatives) |
 | 36 | Future custom LLM | DECLINED, per the doc's own instruction | Explicitly out of scope for a hardening phase |
 | 37 | Security testing (SAST etc.) | PARTIAL | Dependency scanning yes. SAST, secret scanning, fuzzing: not added |

@@ -42,7 +42,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.detectors.registry import get_registered_detectors  # noqa: E402
 from app.models.finding import Decision, Finding, Severity  # noqa: E402
-from app.services.policy_engine import decide, most_severe  # noqa: E402
+from app.services.policy_engine import decide, load_policy, most_severe  # noqa: E402
 from app.services.risk_engine import calculate_risk_score  # noqa: E402
 from app.services.tool_policy import authorize_tool  # noqa: E402
 
@@ -78,6 +78,25 @@ CONFIGS = {
 }
 
 
+# Experimental origin rules for the learned detector. NOT shipped in the
+# default policy: Finding 5 measured them as net-negative (0pp APR, -20pp
+# BCR). Kept here so config K remains exactly reproducible.
+EXPERIMENTAL_ML_ORIGIN_RULES = {
+    "ml_injection@context": "block",
+    "ml_injection@tool_response": "block",
+    "ml_injection@tool_description": "block",
+    "ml_injection@tool_arguments": "block",
+    "ml_injection@input": "warn",
+}
+
+
+def _policy_with_experimental_rules():
+    p = load_policy()
+    p = {**p, "origin_rules": {**p.get("origin_rules", {}), **EXPERIMENTAL_ML_ORIGIN_RULES}}
+    return p
+
+
+_EXPERIMENTAL_POLICY = None
 _ML_MODEL = None
 
 
@@ -192,7 +211,13 @@ def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origi
             findings = findings + _ml_findings(text_for_ml, origin)
 
         score = calculate_risk_score(findings, use_origin_trust=provenance)
-        local.append(decide(findings, score, use_origin_rules=origin_rules))
+        global _EXPERIMENTAL_POLICY
+        if ml and origin_rules:
+            if _EXPERIMENTAL_POLICY is None:
+                _EXPERIMENTAL_POLICY = _policy_with_experimental_rules()
+            local.append(decide(findings, score, policy=_EXPERIMENTAL_POLICY, use_origin_rules=True))
+        else:
+            local.append(decide(findings, score, use_origin_rules=origin_rules))
         decisions.extend(local)
 
     return most_severe(decisions) if decisions else Decision.ALLOW

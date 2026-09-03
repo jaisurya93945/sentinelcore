@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     upstream_timeout_seconds: float = 60.0
     audit_enabled: bool = True
     audit_db_path: str = "sentinelcore_audit.db"
+    ml_detector_enabled: bool = False  # optional learned detector; see app/detectors/ml_classifier/
     api_keys: str = ""  # "key1:role1,key2:role2,..." -- empty means auth disabled
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="SENTINELCORE_")

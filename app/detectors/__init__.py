@@ -4,6 +4,7 @@ via its `@register_detector` decorator -- new detectors just need one import
 line added here (see CONTRIBUTING.md).
 """
 
+from app.detectors import ml_classifier  # noqa: F401
 from app.detectors import obfuscation  # noqa: F401
 from app.detectors import pii  # noqa: F401
 from app.detectors import prompt_injection  # noqa: F401

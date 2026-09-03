@@ -237,6 +237,26 @@ The trust **ordering** (user input < RAG context < tool/MCP output) is the claim
 
 Running the full 744-example evaluation after this change produced **exactly zero difference** (precision 96.83%, recall 17.68%, FPR 0.50%, 0 newly caught, 0 regressions). That is not a null result about provenance -- it is a structural limitation of the benchmark: every example is scanned as `input` origin, so origin-weighting cannot influence any outcome by construction. This is direct evidence that a text-classification benchmark cannot evaluate an agent-security mechanism, and it is the concrete argument for adopting an agent-level benchmark (AgentDojo) rather than extending this one.
 
+## Implemented: Learned Classifier Detector (optional, OFF by default)
+
+**Module:** `app/detectors/ml_classifier/`, trained by `scripts/train_ml_detector.py`
+
+TF-IDF (word 1-2 + char 3-5 grams) into a calibrated logistic regression. Held-out test: **P=93.65% R=85.51% F1=89.39% FPR=5.00% AUC=0.964**, against the rules baseline's 17.68% recall at 0.50% FPR. Stratified seeded 60/20/20 split; the test split is touched once and never used for threshold selection.
+
+**It is a learned LEXICAL classifier, not a transformer and not semantic understanding.** It generalises within training vocabulary and inherits that data's language bias. Calling it "AI-powered semantic detection" would be false.
+
+### Why it is off by default
+
+A 10x false-positive increase (0.50% -> 5.00%) is the right trade for some deployments and the wrong one for others; the operator decides. Enabling it by default would also make scikit-learn a mandatory dependency for a project whose core value is being small and deterministic. Measured agent-level cost: benign workflow completion drops 93.3% -> 80.0%.
+
+### Fail-open, deliberately and explicitly
+
+If scikit-learn is absent, the model file is missing, or inference raises, this detector logs once and returns no findings rather than raising. That is a real security trade-off, stated rather than buried: an optional detector must not take down a gateway whose rules-based detectors, risk engine, policy engine and tool authorization are all still functioning correctly. Failing the whole request would convert degraded detection into a total outage.
+
+### Acted on our own measurement
+
+`ml_injection@<origin>` escalation rules are deliberately **not** in the shipped default policy. Finding 5 measured them as net-negative: 0pp attack prevention gained, 20pp benign completion lost, because provenance escalation converts a probabilistic detector's false positives into hard blocks on external content. They remain reproducible as an experimental override in `scripts/run_ablation.py`. Shipping a default the project's own experiment showed to be harmful would contradict the Authenticity Policy.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.

@@ -64,11 +64,13 @@ origin_rules:
   oracle_injection@tool_description: block
   oracle_injection@tool_arguments: block
   oracle_injection@input: warn
-  ml_injection@context: block
-  ml_injection@tool_response: block
-  ml_injection@tool_description: block
-  ml_injection@tool_arguments: block
-  ml_injection@input: warn
+  # NOTE: ml_injection@<origin> rules deliberately NOT shipped here.
+  # Measured (docs/research/README.md, Finding 5): escalating the learned
+  # classifier's ambiguous findings by origin bought 0pp attack prevention
+  # and cost 20pp benign completion, because it converts that detector's
+  # false positives into hard blocks on external content -- and in an
+  # agent system most content is external. They remain reproducible in
+  # scripts/run_ablation.py as an experimental override.
   # Someone else's text telling the model what to do -- always block.
   system_prompt_extraction@context: block
   system_prompt_extraction@tool_response: block
