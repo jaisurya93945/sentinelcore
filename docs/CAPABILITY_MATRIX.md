@@ -24,6 +24,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Dashboard (`GET /dashboard`) | Screenshot-verified against live seeded data |
 | Attack Replay Lab (version snapshot + diff, regression detection) | `scripts/replay_lab.py`, real v0.1→v0.2→v0.3 comparisons |
 | Real evaluation (744 labeled examples, 2 external MIT-licensed datasets) | `docs/research/README.md` |
+| Model-generated tool-call interception in the proxy (P0 fix) | `tests/unit/test_proxy.py` -- 6 regression tests incl. streaming fragment reassembly |
+| Provenance-aware risk scoring (origin trust multipliers) | `tests/unit/test_origin_trust.py` -- verified to change actual decisions, with an ablation off-switch |
 | Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
 | Docker (multi-stage, non-root) | Not build-tested -- flagged in the file itself |
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |
@@ -41,6 +43,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Origin tagging | Tracked and returned, but doesn't yet affect scoring or policy. |
 | Output blocking (proxy) | Stops the leak from reaching the client; does not stop the upstream API cost, already incurred. |
 | Authentication | Real when enabled, but off by default -- a documented risk if network-reachable without configuring it. |
+| Provenance trust multipliers | Ordering is principled; the constants (1.0/1.5/1.8) are a stated modeling choice, NOT calibrated. |
 | SANITIZE enforcement | Real for the finding types with a defined transform; a multi-word character-spacing collapse can under-represent danger by gluing words together (documented edge case, not hidden). |
 
 ## 3. Planned, Not Implemented

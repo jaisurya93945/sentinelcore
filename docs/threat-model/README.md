@@ -217,6 +217,26 @@ Collapsing a **multi-word** character-spaced run (e.g. an entire spaced-out sent
 - A SANITIZE verdict influenced by findings from more than one text source (e.g. both the main input and a retrieved document) can't be fixed by rewriting just one of them -- reported as `not_applicable` rather than partially sanitizing something that wouldn't address why the decision was made.
 - HUMAN_APPROVAL still has no real approval-collection mechanism behind it -- a separate, unaddressed gap.
 
+## Implemented: Provenance-Aware Risk Scoring
+
+**Module:** `app/services/origin_trust.py`, wired into `app/services/risk_engine.py`
+
+Until this existed, `Finding.origin` was tracked faithfully and then ignored -- neither the risk engine nor the policy engine ever read it, which made "provenance-aware" a false claim. An instruction-override finding in a user's own message and the identical finding inside a retrieved document produced the same score and the same decision.
+
+Severity weights are now scaled by origin. Measured effect on an identical MEDIUM finding: `input` -> 30 (warn), `context:N` -> 45 (warn), `tool_arguments:*` -> 54 (**sanitize**). Same text, different provenance, different outcome.
+
+### What is a modeling choice vs. an empirical result
+
+The trust **ordering** (user input < RAG context < tool/MCP output) is the claim, and it follows from the standard indirect-prompt-injection threat model: attacker-controlled external content reaching the model's context is the core danger, and a user talking to their own assistant is not the same threat as an external party injecting instructions into a conversation they aren't part of. The specific **multipliers** (1.0 / 1.5 / 1.8) are a stated modeling choice, **not calibrated or empirically derived** -- anyone re-deriving them from real data should expect different numbers. They live in one table for exactly that reason.
+
+### The ablation control is deliberate, not legacy
+
+`calculate_risk_score(findings, use_origin_trust=False)` reproduces the pre-provenance behaviour exactly. This is the control condition for the ablation study asking whether provenance-awareness actually improves anything -- removing it would make that experiment impossible.
+
+### Measured: the current benchmark cannot evaluate this
+
+Running the full 744-example evaluation after this change produced **exactly zero difference** (precision 96.83%, recall 17.68%, FPR 0.50%, 0 newly caught, 0 regressions). That is not a null result about provenance -- it is a structural limitation of the benchmark: every example is scanned as `input` origin, so origin-weighting cannot influence any outcome by construction. This is direct evidence that a text-classification benchmark cannot evaluate an agent-security mechanism, and it is the concrete argument for adopting an agent-level benchmark (AgentDojo) rather than extending this one.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.
