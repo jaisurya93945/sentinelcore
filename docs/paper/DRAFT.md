@@ -8,11 +8,11 @@
 
 Defenses for LLM agents increasingly layer provenance tracking and authority enforcement on top of a content detector. We evaluate this layering directly, using an 11-configuration ablation over an agent-trace benchmark, and report three results that complicate the prevailing design.
 
-First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 0.282 to 0.941, a larger gain than any policy mechanism we tested.
+First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 0.282 to 0.788, a larger gain than any policy mechanism we tested.
 
-Second, **provenance-aware escalation is not free, and its apparent value depends on how detection is simulated.** Under a ground-truth oracle at ambiguous confidence, provenance improves attack prevention by **47.0 points (0.365 → 0.835, non-overlapping 95% CIs)** at no utility cost. Under a real classifier of comparable recall, the same mechanism yields **+2.4 points, not statistically distinguishable from zero**, while costing roughly 9 points of benign task completion.
+Second, **provenance-aware escalation is not free, and its apparent value depends on how detection is simulated.** Under a ground-truth oracle at ambiguous confidence, provenance improves attack prevention by **47.0 points (0.365 → 0.835, non-overlapping 95% CIs)** at no utility cost. Under a real classifier the same mechanism yields at most **+11.8 points, at the edge of statistical resolution**, and always charges benign task completion for it (−7.1 points). Its value further depends on the detector's operating point: at a more aggressive threshold the gain falls to +2.4 points while the cost rises to −9.4.
 
-Third, and consequently, **oracle-based evaluation systematically overstates layered defenses — here by roughly 20×.** An oracle has no false positives by construction, so a layer whose cost is paid in escalated false positives appears free. The significance runs the wrong way round: the misleading measurement is the statistically solid one, while the deployment-realistic measurement vanishes into noise. We argue this is a general hazard for evaluations of provenance and authority mechanisms, not a quirk of our system.
+Third, and consequently, **oracle-based evaluation systematically overstates layered defenses — here by roughly 4×, while hiding their cost entirely.** An oracle has no false positives by construction, so a layer whose cost is paid in escalated false positives appears free. The significance runs the wrong way round: the misleading measurement is the statistically solid one, while the deployment-realistic measurement vanishes into noise. We argue this is a general hazard for evaluations of provenance and authority mechanisms, not a quirk of our system.
 
 Evaluation uses 170 agent traces whose attack and benign payload text is drawn from the **held-out** split of public datasets rather than authored by us, addressing the self-authorship bias that limited an earlier version of this work.
 
@@ -31,7 +31,7 @@ We measure this with a deliberately unglamorous method: hold the benchmark fixed
 ### Contributions
 
 1. An 11-configuration ablation isolating content detection, provenance scoring, provenance-conditioned policy rules, tool authorization, and detector quality (§4).
-2. A quantification of detection recall as the binding constraint: changing only the detector moves agent-level attack prevention by 65.9 points (0.282 → 0.941), against 8.3 points for the strongest policy mechanism we tested (§5.1, §5.3).
+2. A quantification of detection recall as the binding constraint: changing only the detector moves agent-level attack prevention by 50.6 points (0.282 → 0.788), against 8.3 points for the strongest policy mechanism at the same detector (§5.1, §5.3).
 3. A demonstration that provenance escalation's measured benefit **inverts** between oracle and real detectors, and a mechanism explaining why (§5.3).
 4. A control-plane coverage vulnerability class, with a reproduction (§3.3).
 5. All code, data, splits, seeds, and the negative results, released.
@@ -158,17 +158,22 @@ Random splits of a pooled corpus cannot detect corpus-level memorisation. Traini
 
 Performance does not degrade across sources (gap −4.5%). Because pr1m8 contains no benign examples this measures **recall transfer only**; false-positive behaviour on an unseen source is not assessed. Weakest category: `obfuscation` at 50%, consistent with a lexical model and an argument for retaining the deterministic obfuscation checks rather than replacing them.
 
-#### 5.1.2 Operating points: the false-positive cost is a threshold artifact
+#### 5.1.2 Operating points, and a retracted claim
 
-At threshold 0.5 the classifier shows 5.0% FPR against the rules baseline's 0.0%, which reads as a security/utility trade. Sweeping the threshold shows it is not one:
+At threshold 0.5 the classifier shows 5.0% FPR against the rules baseline's 0.0%, which reads as a security/utility trade. A single-slice threshold sweep suggested it is not one: at 0.8 the classifier appeared to reach 75.8% recall at exactly 0.0% FPR, i.e. strict domination.
 
-| Threshold | Precision | Recall | FPR |
-|---|---|---|---|
-| 0.5 | 92.2% | 89.4% | 5.0% |
-| 0.7 | 98.2% | 83.3% | 1.0% |
-| **0.8** | **100.0%** | **75.8%** | **0.0%** |
+**That did not reproduce.** A multi-seed study (thresholds selected on validation, evaluated on an untouched test split, 10 seeds) found the zero-FPR threshold ranging **0.61–0.98** (std 0.125), and applying the validation-selected threshold to test yields **1.1% FPR, not 0%**. No fixed threshold reliably achieves zero false positives, and we withdraw that claim.
 
-**At the baseline's own operating point (0.0% FPR), the classifier reaches 78.8% recall against 18.2%.** It strictly dominates rather than trading. We do not retune the shipped defaults on this, because the sweep is a single held-out slice and single-slice tuning is precisely the error corrected twice already in §5.1.
+The replacement is weaker in form but stronger in evidence — the most *stable* operating point is a fixed threshold of 0.80, which outperformed per-seed adaptive selection:
+
+| 10 seeds, mean [95% CI] | Learned @ 0.80 | Rules |
+|---|---|---|
+| **Recall** | **72.0% [60.4, 83.7]** | 18.6% [12.2, 28.7] |
+| FPR | 1.1% [0.0, 2.5] | 0.5% [0.0, 2.2] |
+
+Recall intervals do not overlap (3.9×, significant); FPR intervals do overlap, so the false-positive increase is **not statistically distinguishable**. The classifier dominates — just not at exactly zero FPR.
+
+Shipped detector thresholds are set from this study (reporting floor 0.50, high-confidence 0.80), not from the single slice.
 
 ### 5.2 Statistical validation
 
@@ -176,7 +181,7 @@ At threshold 0.5 the classifier shows 5.0% FPR against the rules baseline's 0.0%
 
 ### 5.3 Ablation
 
-Bootstrap 95% CIs over 85 attack and 85 benign traces (10,000 resamples):
+Bootstrap 95% CIs over 85 attack and 85 benign traces (10,000 resamples), at the shipped detector thresholds:
 
 | Config | APR [95% CI] | BCR [95% CI] |
 |---|---|---|
@@ -184,15 +189,18 @@ Bootstrap 95% CIs over 85 attack and 85 benign traces (10,000 resamples):
 | B + prov. scoring | 0.306 [0.212, 0.400] | 1.000 [1.000, 1.000] |
 | C + tool authz | 0.365 [0.259, 0.471] | 0.988 [0.965, 1.000] |
 | E + prov. rules | 0.400 [0.294, 0.506] | 0.988 [0.965, 1.000] |
-| F oracle(HIGH) | 0.965 | 0.988 |
 | H oracle(MED) | 0.365 [0.259, 0.471] | 0.988 [0.965, 1.000] |
 | **I oracle(MED) + prov.** | **0.835 [0.753, 0.906]** | 0.988 [0.965, 1.000] |
-| **J learned** | **0.941 [0.882, 0.988]** | 0.882 [0.812, 0.941] |
-| K learned + prov. | 0.965 [0.918, 1.000] | 0.788 [0.694, 0.871] |
+| **J learned** | **0.788 [0.694, 0.871]** | 0.918 [0.859, 0.977] |
+| **K learned + prov.** | **0.906 [0.835, 0.965]** | 0.847 [0.765, 0.918] |
 
-**Significant.** Detection choice dominates: A (0.282) vs J (0.941), intervals nowhere near overlapping — a 66-point swing from changing the detector alone. And the oracle provenance effect: H (0.365 [0.259, 0.471]) vs I (0.835 [0.753, 0.906]), **non-overlapping, +47.0 points**.
+**Significant.** Detection choice dominates: A (0.282 [0.188, 0.377]) vs J (0.788 [0.694, 0.871]), non-overlapping — a 50.6-point swing from changing the detector alone, against 8.3 points for the best policy mechanism. And the oracle provenance effect: H (0.365 [0.259, 0.471]) vs I (0.835 [0.753, 0.906]), **non-overlapping, +47.0 points**.
 
-**Not significant.** Provenance with a real detector: J vs K is +2.4 points with substantially overlapping intervals. Its utility cost (BCR 0.882 → 0.788) is borderline, the intervals overlapping only at their edges. Provenance over rules-based detection (A→B +2.4, C→E +3.5) likewise does not resolve — though both are now non-zero, where the smaller v1 benchmark measured them at exactly zero.
+**Borderline.** Provenance with a real detector: J (0.788 [0.694, 0.871]) vs K (0.906 [0.835, 0.965]) is **+11.8 points**, with intervals overlapping only at their edges. Its utility cost is −7.1 points (BCR 0.918 → 0.847), similarly borderline.
+
+**Not significant.** Provenance over rules-based detection (A→B +2.4, C→E +3.5) does not resolve.
+
+**Provenance's value is operating-point dependent.** At an aggressive detector threshold (reporting floor 0.35) the same comparison gives only +2.4 APR at −9.4 BCR: the detector emits many weak findings, and provenance escalation converts its false positives into hard blocks. At the conservative shipped threshold (0.50) the surviving findings are more reliable and escalating them buys +11.8 for −7.1. This is the mechanism of §5.4 demonstrated by moving the operating point rather than by substituting an oracle, and it means a single reported number for "the value of provenance" is not well defined without stating the detector's operating point.
 
 #### 5.3.1 Mechanisms
 
@@ -200,18 +208,19 @@ Bootstrap 95% CIs over 85 attack and 85 benign traces (10,000 resamples):
 
 **Provenance over rules-based detection contributes little** (A→B +2.4, C→E +3.5, neither significant). The diagnosis from the smaller benchmark still holds and explains why: categorical per-finding-type policy rules fire regardless of score, so score weighting rarely reaches a threshold that is actually consulted, and where the rules detector produces *no* finding at all — paraphrased, non-English, or purely semantic attacks — there is nothing for provenance to re-weight. Zero multiplied by any trust factor remains zero.
 
-**Detection quality dominates everything else.** A → J is +65.9 points (0.282 → 0.941) from changing only the detector, against +8.3 for the best policy mechanism. The gap is detection, not policy.
+**Detection quality dominates everything else.** A → J is +50.6 points (0.282 → 0.788) from changing only the detector, against +8.3 for the best policy mechanism applied to the same detector. The gap is detection, not policy.
 
-### 5.4 The oracle overstates provenance by roughly 20×
+### 5.4 The oracle overstates provenance by roughly 4× and hides its cost
 
 The same mechanism, measured two ways on the same benchmark:
 
 | | Δ APR | Significant? | Utility cost |
 |---|---|---|---|
-| Under oracle (MED) | **+47.0 pts** | **yes** — non-overlapping CIs | none |
-| Under learned classifier | +2.4 pts | no — CIs overlap | ≈ −9 pts BCR |
+| Under oracle (MED) | **+47.0 pts** | **yes** — non-overlapping CIs | **none** |
+| Under learned classifier (shipped threshold) | +11.8 pts | borderline — CIs overlap at edges | −7.1 pts BCR |
+| Under learned classifier (aggressive threshold) | +2.4 pts | no | −9.4 pts BCR |
 
-**The significance runs the wrong way round, and that is the point.** The measurement that overstates the mechanism is the statistically solid one; the deployment-realistic measurement is the one that dissolves into noise. A paper reporting only the oracle configuration would present a large, significant, apparently cost-free improvement for a mechanism that, against a real detector, buys nothing measurable and degrades utility.
+**The oracle overstates the effect by roughly 4× and hides its cost entirely.** It reports +47.0 points at zero utility cost; the same mechanism against a real detector delivers at most +11.8 points and always charges utility for it. The significance also runs the wrong way round: the oracle measurement is unambiguously significant while the deployment-realistic one sits at the edge of resolution. A paper reporting only the oracle configuration would present a large, significant, apparently cost-free improvement for a mechanism whose real-world benefit is smaller, conditional on the detector's operating point, and never free.
 
 The mechanism is visible in the failures. When the classifier fires at ambiguous confidence on benign external content, a flat policy warns and the workflow completes. Provenance escalates that same uncertain finding to `block` because it arrived from `context`. Ordinary workflows break: summarising a document, an internal lookup, a search. **Provenance escalation converts a probabilistic detector's false positives into hard blocks** — and in an agent system most content is external, so most of the detector's error surface is exactly where escalation applies.
 
