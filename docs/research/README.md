@@ -375,3 +375,53 @@ This is the paper's central claim, and it is now demonstrated on a benchmark who
 ## A bug found while doing this
 
 The first v2 ablation run showed the oracle configurations scoring *below* the learned classifier — impossible for a ground-truth detector. Cause: the v2 builder did not emit the `oracle_malicious` flag the oracle reads, so it silently saw nothing and the F–I configurations were meaningless. Fixed by marking the payload-carrying event, with structural attacks deliberately left unmarked (their payload is an action with clean text, invisible to any content detector by construction). Recorded because the failure was silent — the configurations produced plausible-looking numbers rather than an error.
+
+---
+
+# Cross-Source Transfer and Operating Points
+
+`python scripts/cross_source_analysis.py`. Two questions a reviewer asks before believing 0.884 recall.
+
+## 1. Does it transfer, or is it memorising one corpus?
+
+All performance reported so far comes from random splits of a *pooled* corpus. If the two sources share phrasing or collection idiosyncrasies, a random split measures memorisation of those, not detection. The honest test trains on one source and evaluates on the other — something no random split can simulate.
+
+Train on deepset (662, both classes) → test on pr1m8 (82, all malicious, multilingual, categorised):
+
+| | Recall |
+|---|---|
+| In-domain reference (deepset held-out) | 89.4% |
+| **Cross-source, learned** | **93.9%** |
+| Cross-source, rules baseline | 20.7% |
+
+**Transfer gap: −4.5% — performance did not degrade.** The classifier is not fitting deepset's idiosyncrasies.
+
+One caveat stated plainly: pr1m8 contains no benign examples, so this measures **recall transfer only**. False-positive behaviour on an unseen source is not assessed and we do not claim it. The higher cross-source figure may partly reflect pr1m8's attacks being more overt; the rules baseline scoring 20.7% on the same data provides the difficulty control.
+
+Transfer by language is the surprising part for a lexical model: German 100% (12/12), Spanish 100%, mixed-script 100%. Character n-grams appear to carry more cross-lingual signal than word features alone would.
+
+**The weakest category is `obfuscation` at 50% (4/8)** — the honest weak spot, and consistent with the model's nature: obfuscation is a character-level transformation, and while char n-grams capture some of it, they are not a substitute for the dedicated deterministic checks. This is an argument for keeping the rules-based obfuscation detector rather than replacing it.
+
+## 2. The 5% false-positive cost was a threshold artifact
+
+Everything above was reported at threshold 0.5, an arbitrary default. Sweeping it on the held-out slice:
+
+| Threshold | Precision | Recall | FPR |
+|---|---|---|---|
+| 0.3 | 86.1% | 93.9% | 10.0% |
+| 0.5 | 92.2% | 89.4% | 5.0% |
+| 0.7 | 98.2% | 83.3% | 1.0% |
+| **0.8** | **100.0%** | **75.8%** | **0.0%** |
+| 0.9 | 100.0% | 57.6% | 0.0% |
+
+**At the rules baseline's exact operating point — 0.0% FPR — the classifier achieves 78.8% recall against the baseline's 18.2%.**
+
+This materially revises a claim made earlier in this document. We had characterised the learned detector as trading a 10× false-positive increase for higher recall. At a matched operating point it does not trade anything: it **strictly dominates**, delivering roughly 4.3× the recall at the same zero false-positive rate. The apparent cost was an artifact of comparing a tuned-for-recall threshold against a rules engine that is inherently high-precision.
+
+### We are deliberately not retuning the shipped default on this result
+
+The sweep comes from a single held-out slice. Twice already in this project a single-split number has turned out to be unrepresentative — the 4.84× that became 3.10× that became 4.78×. Selecting production thresholds from one slice would be the same error a third time. The frontier is documented so operators can choose; the shipped bands are unchanged pending a multi-seed threshold study.
+
+## A bug found and fixed here
+
+The matched-FPR comparison initially reported the classifier achieving **0.0% recall** at the baseline's FPR, while the sweep table in the same output showed 75.8% at that FPR — a flat self-contradiction. Cause: `roc_curve`'s first point is the degenerate `(fpr=0, tpr=0, threshold=inf)` endpoint, and selecting by nearest-FPR picks it whenever the target FPR is zero. Fixed to take the best recall among points at or below the target. The two contradictory numbers in one output are what surfaced it.

@@ -146,6 +146,30 @@ Recall and FPR confidence intervals do not overlap. **McNemar's exact test (pair
 
 The single seed used above (20260903) gave the rules baseline 27.54% recall — near the *top* of its 10-seed interval, and thus unusually favourable to the baseline. The representative improvement is **4.78× (0.185 → 0.884)**, not 3.10×. Both figures are correct for their respective data; the 3.10× is a single-split artifact, which is exactly what multi-seed evaluation exists to expose.
 
+#### 5.1.1 Cross-source transfer
+
+Random splits of a pooled corpus cannot detect corpus-level memorisation. Training on deepset and evaluating on pr1m8 — a different source, multilingual, independently categorised:
+
+| | Recall |
+|---|---|
+| In-domain (deepset held-out) | 89.4% |
+| **Cross-source, learned** | **93.9%** |
+| Cross-source, rules | 20.7% |
+
+Performance does not degrade across sources (gap −4.5%). Because pr1m8 contains no benign examples this measures **recall transfer only**; false-positive behaviour on an unseen source is not assessed. Weakest category: `obfuscation` at 50%, consistent with a lexical model and an argument for retaining the deterministic obfuscation checks rather than replacing them.
+
+#### 5.1.2 Operating points: the false-positive cost is a threshold artifact
+
+At threshold 0.5 the classifier shows 5.0% FPR against the rules baseline's 0.0%, which reads as a security/utility trade. Sweeping the threshold shows it is not one:
+
+| Threshold | Precision | Recall | FPR |
+|---|---|---|---|
+| 0.5 | 92.2% | 89.4% | 5.0% |
+| 0.7 | 98.2% | 83.3% | 1.0% |
+| **0.8** | **100.0%** | **75.8%** | **0.0%** |
+
+**At the baseline's own operating point (0.0% FPR), the classifier reaches 78.8% recall against 18.2%.** It strictly dominates rather than trading. We do not retune the shipped defaults on this, because the sweep is a single held-out slice and single-slice tuning is precisely the error corrected twice already in §5.1.
+
 ### 5.2 Statistical validation
 
 10 independent stratified splits, McNemar's exact test for the paired classifier comparison, and 10,000-sample bootstrap CIs for the agent-benchmark rates. Reproduce with `scripts/statistical_validation.py`.

@@ -1,0 +1,139 @@
+{
+  "seed": 20260903,
+  "deepset_n": 662,
+  "pr1m8_n": 82,
+  "transfer": {
+    "train": "deepset",
+    "test": "pr1m8 (all malicious)",
+    "in_domain_recall_reference": 0.8939,
+    "cross_source_recall_learned": 0.939,
+    "cross_source_recall_rules": 0.2073,
+    "by_category": {
+      "Authority Role": {
+        "hit": 5,
+        "n": 5,
+        "recall": 1.0
+      },
+      "Context Manipulation": {
+        "hit": 8,
+        "n": 8,
+        "recall": 1.0
+      },
+      "Hijacking": {
+        "hit": 5,
+        "n": 5,
+        "recall": 1.0
+      },
+      "Multilingual": {
+        "hit": 7,
+        "n": 8,
+        "recall": 0.875
+      },
+      "Psychological Manipulation": {
+        "hit": 8,
+        "n": 8,
+        "recall": 1.0
+      },
+      "instruction_override": {
+        "hit": 23,
+        "n": 23,
+        "recall": 1.0
+      },
+      "obfuscation": {
+        "hit": 4,
+        "n": 8,
+        "recall": 0.5
+      },
+      "role_manipulation": {
+        "hit": 17,
+        "n": 17,
+        "recall": 1.0
+      }
+    },
+    "by_language": {
+      "Chinese": {
+        "hit": 0,
+        "n": 1,
+        "recall": 0.0
+      },
+      "English": {
+        "hit": 62,
+        "n": 66,
+        "recall": 0.9394
+      },
+      "German": {
+        "hit": 12,
+        "n": 12,
+        "recall": 1.0
+      },
+      "Mixed Languages": {
+        "hit": 1,
+        "n": 1,
+        "recall": 1.0
+      },
+      "Mixed Scripts": {
+        "hit": 1,
+        "n": 1,
+        "recall": 1.0
+      },
+      "Spanish": {
+        "hit": 1,
+        "n": 1,
+        "recall": 1.0
+      }
+    }
+  },
+  "operating_points": {
+    "matched_fpr_comparison": {
+      "target_fpr_from_rules": 0.0,
+      "achieved_fpr": 0.0,
+      "threshold": 0.786,
+      "learned_recall_at_that_fpr": 0.7879,
+      "rules_recall_for_comparison": 0.1818
+    },
+    "sweep": [
+      {
+        "threshold": 0.3,
+        "precision": 0.8611,
+        "recall": 0.9394,
+        "fpr": 0.1
+      },
+      {
+        "threshold": 0.4,
+        "precision": 0.8955,
+        "recall": 0.9091,
+        "fpr": 0.07
+      },
+      {
+        "threshold": 0.5,
+        "precision": 0.9219,
+        "recall": 0.8939,
+        "fpr": 0.05
+      },
+      {
+        "threshold": 0.6,
+        "precision": 0.9661,
+        "recall": 0.8636,
+        "fpr": 0.02
+      },
+      {
+        "threshold": 0.7,
+        "precision": 0.9821,
+        "recall": 0.8333,
+        "fpr": 0.01
+      },
+      {
+        "threshold": 0.8,
+        "precision": 1.0,
+        "recall": 0.7576,
+        "fpr": 0.0
+      },
+      {
+        "threshold": 0.9,
+        "precision": 1.0,
+        "recall": 0.5758,
+        "fpr": 0.0
+      }
+    ]
+  }
+}
