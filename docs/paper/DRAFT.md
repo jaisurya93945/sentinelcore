@@ -8,11 +8,13 @@
 
 Defenses for LLM agents increasingly layer provenance tracking and authority enforcement on top of a content detector. We evaluate this layering directly, using an 11-configuration ablation over an agent-trace benchmark, and report three results that complicate the prevailing design.
 
-First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 81.8% to 100%, a larger gain than any policy mechanism we tested.
+First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 0.282 to 0.941, a larger gain than any policy mechanism we tested.
 
-Second, **provenance-aware escalation is not free, and its apparent value depends on how detection is simulated.** With a ground-truth oracle detector, adding provenance improves attack prevention by 9.1 points at zero utility cost. With a real classifier of comparable recall, the same mechanism yields no additional prevention and costs 20 points of benign task completion. *These agent-benchmark differences are not statistically significant at our sample size (bootstrap CIs span ±18 points); we support them with causal diagnosis of the specific scenarios that change, and state plainly that the benchmark needs 5–10× more traces to resolve them.*
+Second, **provenance-aware escalation is not free, and its apparent value depends on how detection is simulated.** Under a ground-truth oracle at ambiguous confidence, provenance improves attack prevention by **47.0 points (0.365 → 0.835, non-overlapping 95% CIs)** at no utility cost. Under a real classifier of comparable recall, the same mechanism yields **+2.4 points, not statistically distinguishable from zero**, while costing roughly 9 points of benign task completion.
 
-Third, and consequently, **oracle-based evaluation systematically overstates layered defenses.** An oracle has no false positives by construction; a layer whose cost is paid in escalated false positives therefore appears free. We argue this is a general hazard for evaluations of provenance and authority mechanisms, not a quirk of our system.
+Third, and consequently, **oracle-based evaluation systematically overstates layered defenses — here by roughly 20×.** An oracle has no false positives by construction, so a layer whose cost is paid in escalated false positives appears free. The significance runs the wrong way round: the misleading measurement is the statistically solid one, while the deployment-realistic measurement vanishes into noise. We argue this is a general hazard for evaluations of provenance and authority mechanisms, not a quirk of our system.
+
+Evaluation uses 170 agent traces whose attack and benign payload text is drawn from the **held-out** split of public datasets rather than authored by us, addressing the self-authorship bias that limited an earlier version of this work.
 
 We also report a control-plane vulnerability class found in our own gateway: a component that correctly scanned tool calls was never reachable from the request path that produced them, so every model-generated action bypassed enforcement while each component passed its own tests.
 
@@ -29,7 +31,7 @@ We measure this with a deliberately unglamorous method: hold the benchmark fixed
 ### Contributions
 
 1. An 11-configuration ablation isolating content detection, provenance scoring, provenance-conditioned policy rules, tool authorization, and detector quality (§4).
-2. A quantification of detection recall as the binding constraint: the entire 18.2-point prevention gap between our shipped system and an oracle is attributable to detection, not policy (§5.1).
+2. A quantification of detection recall as the binding constraint: changing only the detector moves agent-level attack prevention by 65.9 points (0.282 → 0.941), against 8.3 points for the strongest policy mechanism we tested (§5.1, §5.3).
 3. A demonstration that provenance escalation's measured benefit **inverts** between oracle and real detectors, and a mechanism explaining why (§5.3).
 4. A control-plane coverage vulnerability class, with a reproduction (§3.3).
 5. All code, data, splits, seeds, and the negative results, released.
@@ -77,7 +79,13 @@ The generalizable point: component-level testing cannot detect an unreachable co
 
 **Text benchmark.** 744 labeled examples from two public MIT-licensed datasets. Stratified, seeded 60/20/20 train/validation/test. The test split is used once; confidence thresholds are selected on validation only.
 
-**Agent-trace benchmark.** 37 deterministic event traces (22 attack, 15 benign) spanning direct injection, indirect injection via RAG, MCP tool poisoning, unauthorized tool use, exfiltration via tool arguments, and multi-step compositional attacks. Traces replay through the full pipeline.
+**Agent-trace benchmark.** 170 deterministic event traces (85 attack, 85 benign). Payload text for 149 of them is drawn from the **held-out test split** of the two public datasets — externally authored, independently labelled, and unseen by the learned classifier during both training and threshold selection. We contribute only the structure: which provenance vector carries the payload (user input, retrieved document, tool response, MCP tool description) and what action the agent then attempts.
+
+Each held-out text is used in **exactly one trace**. Reusing payloads across delivery vectors would inflate the sample count while producing correlated samples and falsely narrow confidence intervals.
+
+The remaining 21 traces are authored, and flagged as such in the data: structural attacks (destructive tool calls with clean arguments, exfiltration through tool arguments) and hard benign cases (a legitimate destructive operation, a security-training question, benign text that superficially resembles an injection). Neither has textual payload to borrow, because in those cases the attack *is* the action.
+
+An earlier version of this work used 37 fully self-authored traces. Those results are superseded; the direction of every qualitative finding held, but the effect sizes changed materially.
 
 **This is not a live-agent benchmark.** "The unsafe action in this trace was blocked" is strictly weaker than "an agent driven by a real model was stopped." We treat it as a bridge to live-agent evaluation, not a substitute.
 
@@ -144,56 +152,46 @@ The single seed used above (20260903) gave the rules baseline 27.54% recall — 
 
 ### 5.3 Ablation
 
-| Config | APR | BCR |
-|---|---|---|
-| A rules | 72.7% | 100.0% |
-| B rules + prov. scoring | 72.7% | 100.0% |
-| C rules + tool authz | 81.8% | 93.3% |
-| D rules + scoring + authz | 81.8% | 93.3% |
-| E rules + prov. rules + authz | 81.8% | 93.3% |
-| F oracle(HIGH) | 100.0% | 93.3% |
-| G oracle(HIGH) + prov. | 100.0% | 93.3% |
-| H oracle(MED) | 81.8% | 93.3% |
-| I oracle(MED) + prov. | **90.9%** | 93.3% |
-| J learned | **100.0%** | 80.0% |
-| K learned + prov. | 100.0% | **60.0%** |
-
-**These differences are not statistically significant at this sample size.** Bootstrap 95% CIs over 22 attack and 15 benign traces:
+Bootstrap 95% CIs over 85 attack and 85 benign traces (10,000 resamples):
 
 | Config | APR [95% CI] | BCR [95% CI] |
 |---|---|---|
-| A rules | 0.727 [0.545, 0.909] | 1.000 [1.000, 1.000] |
-| C + tool authz | 0.818 [0.636, 0.955] | 0.933 [0.800, 1.000] |
-| H oracle(MED) | 0.818 [0.636, 0.955] | 0.933 [0.800, 1.000] |
-| I oracle(MED)+prov | 0.909 [0.773, 1.000] | 0.933 [0.800, 1.000] |
-| J learned | 1.000 [1.000, 1.000] | 0.800 [0.600, 1.000] |
-| K learned+prov | 1.000 [1.000, 1.000] | 0.600 [0.333, 0.867] |
+| A rules | 0.282 [0.188, 0.377] | 1.000 [1.000, 1.000] |
+| B + prov. scoring | 0.306 [0.212, 0.400] | 1.000 [1.000, 1.000] |
+| C + tool authz | 0.365 [0.259, 0.471] | 0.988 [0.965, 1.000] |
+| E + prov. rules | 0.400 [0.294, 0.506] | 0.988 [0.965, 1.000] |
+| F oracle(HIGH) | 0.965 | 0.988 |
+| H oracle(MED) | 0.365 [0.259, 0.471] | 0.988 [0.965, 1.000] |
+| **I oracle(MED) + prov.** | **0.835 [0.753, 0.906]** | 0.988 [0.965, 1.000] |
+| **J learned** | **0.941 [0.882, 0.988]** | 0.882 [0.812, 0.941] |
+| K learned + prov. | 0.965 [0.918, 1.000] | 0.788 [0.694, 0.871] |
 
-Every pairwise APR comparison among A/C/H/I has heavily overlapping intervals. **The +9.1-point differences reported below are directionally suggestive but not statistically distinguishable from noise at n=22.** The same holds for the −20-point BCR difference between J and K (intervals [0.600, 1.000] and [0.333, 0.867] overlap substantially).
+**Significant.** Detection choice dominates: A (0.282) vs J (0.941), intervals nowhere near overlapping — a 66-point swing from changing the detector alone. And the oracle provenance effect: H (0.365 [0.259, 0.471]) vs I (0.835 [0.753, 0.906]), **non-overlapping, +47.0 points**.
 
-We report the mechanisms anyway, because the evidence for them is **causal-diagnostic rather than rate-based**: we identify the specific scenarios that change and verify why (§5.3.1, §5.4). A rate difference that is not significant, plus a verified mechanism explaining exactly which cases move and why, is weaker evidence than a significant rate difference but stronger than either alone. The honest conclusion is that **the agent benchmark needs roughly 5–10× more traces to resolve effects of this size**, and that is the single most valuable extension to this work.
+**Not significant.** Provenance with a real detector: J vs K is +2.4 points with substantially overlapping intervals. Its utility cost (BCR 0.882 → 0.788) is borderline, the intervals overlapping only at their edges. Provenance over rules-based detection (A→B +2.4, C→E +3.5) likewise does not resolve — though both are now non-zero, where the smaller v1 benchmark measured them at exactly zero.
 
 #### 5.3.1 Mechanisms
 
-**Tool authorization** contributes +9.1 APR (A→C), entirely within `compositional` and `unauthorized_tool` (both 75%→100%) — categories where the attack is a privileged action with clean arguments that no content scanner can see. It costs 6.7 BCR, traced to one identified scenario: a legitimate destructive operation blocked by policy.
+**Tool authorization** contributes +8.3 points (A 0.282 → C 0.365), concentrated in the `structural_action` category — attacks whose payload is a privileged action with entirely clean arguments (`database.delete(table="customer_records")`, `payment.transfer`). No content scanner can see these; the text is unremarkable. Its cost is small but real: one benign trace blocked, a legitimate destructive operation the tool policy denies by design.
 
-**Provenance over rules-based detection contributes nothing** (A→B, C→D, D→E all null). Diagnosis: categorical per-type policy rules fire regardless of score, so score weighting never reaches a consulted threshold. Applying provenance at the *rule* layer instead (E) also changed zero of 37 decisions. Both null results have the same cause — the four attacks surviving every rules configuration produce **zero findings** (paraphrased, non-English, purely semantic, soft-phrased). Provenance re-weights findings that exist; zero multiplied by any trust factor is zero.
+**Provenance over rules-based detection contributes little** (A→B +2.4, C→E +3.5, neither significant). The diagnosis from the smaller benchmark still holds and explains why: categorical per-finding-type policy rules fire regardless of score, so score weighting rarely reaches a threshold that is actually consulted, and where the rules detector produces *no* finding at all — paraphrased, non-English, or purely semantic attacks — there is nothing for provenance to re-weight. Zero multiplied by any trust factor remains zero.
 
-**Detection quality dominates.** J reaches 100% APR. The entire 18.2-point gap between C and J is detection, not policy.
+**Detection quality dominates everything else.** A → J is +65.9 points (0.282 → 0.941) from changing only the detector, against +8.3 for the best policy mechanism. The gap is detection, not policy.
 
-### 5.4 The oracle inverts the provenance result
+### 5.4 The oracle overstates provenance by roughly 20×
 
-With an ambiguous-confidence oracle, provenance is a clean win: **H→I, +9.1 APR at zero BCR cost.**
+The same mechanism, measured two ways on the same benchmark:
 
-With a real classifier of comparable recall, the same mechanism is a clear loss: **J→K, 0 APR gain, −20.0 BCR.**
+| | Δ APR | Significant? | Utility cost |
+|---|---|---|---|
+| Under oracle (MED) | **+47.0 pts** | **yes** — non-overlapping CIs | none |
+| Under learned classifier | +2.4 pts | no — CIs overlap | ≈ −9 pts BCR |
 
-The mechanism is visible in the failures. Under J, the classifier fires at ambiguous confidence on benign external content and the flat rule warns — harmless. Under K, the origin rule escalates that same uncertain finding to `block` because it arrived from `context`. Three ordinary workflows break: summarizing a quarterly report, an HR document lookup, a literature search.
+**The significance runs the wrong way round, and that is the point.** The measurement that overstates the mechanism is the statistically solid one; the deployment-realistic measurement is the one that dissolves into noise. A paper reporting only the oracle configuration would present a large, significant, apparently cost-free improvement for a mechanism that, against a real detector, buys nothing measurable and degrades utility.
 
-**Provenance escalation converts a probabilistic detector's false positives into hard blocks.** A 5% FPR is tolerable when uncertainty only warns; it is not when provenance escalates uncertainty on external content — and in an agent system, most content is external.
+The mechanism is visible in the failures. When the classifier fires at ambiguous confidence on benign external content, a flat policy warns and the workflow completes. Provenance escalates that same uncertain finding to `block` because it arrived from `context`. Ordinary workflows break: summarising a document, an internal lookup, a search. **Provenance escalation converts a probabilistic detector's false positives into hard blocks** — and in an agent system most content is external, so most of the detector's error surface is exactly where escalation applies.
 
-The oracle has **zero false positives by construction**. That is precisely the assumption that fails in deployment, and precisely what made provenance appear free.
-
----
+An oracle has **zero false positives by construction**. That is precisely the property that fails in deployment, and precisely what makes provenance appear free.
 
 ## 6. Discussion
 
@@ -207,9 +205,9 @@ The oracle has **zero false positives by construction**. That is precisely the a
 
 ## 7. Limitations and Threats to Validity
 
-1. **Self-authored agent benchmark.** 37 traces written by the same authors as the system. Mitigations: categories drawn from published taxonomies; nine scenarios deliberately included that the system is expected to fail; hard benign cases included so utility cost is measured. APR is 81.8%, not 100% — had it been 100%, the benchmark would be broken. This remains the most serious threat and is only fully addressed by external benchmarks (AgentDojo, InjecAgent), which we have not yet run.
+1. **Partially authored agent benchmark.** 149 of 170 traces carry externally-authored, held-out payload text; the trace *structure* (which vector carries the payload, what action follows) is ours, as are 21 fully authored traces, flagged in the data. This substantially reduces but does not eliminate authorship bias: we still chose the delivery vectors and the action set. Fully addressing it requires an external agent benchmark (AgentDojo, InjecAgent), which we have not run.
 2. **No live agent.** Deterministic trace replay, not a model-driven agent.
-3. **Small scale, quantified.** The text-benchmark results are statistically solid: 10 seeds, non-overlapping CIs, McNemar p < 5.6×10⁻⁶ on every seed. **The agent-benchmark results are underpowered.** With 22 attack and 15 benign traces, bootstrap CIs span roughly ±18 points, so none of the ablation's 9–20 point differences are statistically distinguishable. Those findings rest on causal diagnosis of named scenarios rather than on rate differences, and should be read as mechanistic hypotheses with supporting traces, not as measured effect sizes. Resolving them requires roughly 5–10× more traces.
+3. **Scale, quantified.** Text-benchmark results are solid: 10 seeds, non-overlapping CIs, McNemar p < 5.6×10⁻⁶ on every seed. Agent-benchmark CIs narrowed from roughly ±18 points (37 traces) to ±10 (170), which resolved the two largest effects — detection dominance and the oracle provenance effect — but **not** the small ones. The +2.4-point real-detector provenance gain and its ≈9-point utility cost remain unresolved and should not be quoted as effect sizes. Resolving those requires several hundred more traces or a benchmark with higher per-trace signal.
 4. **The classifier is lexical, not semantic.** It will not generalize to novel semantic attacks or to languages outside its training data.
 5. **Single trust-multiplier configuration.** Constants are a stated modeling choice, not calibrated.
 6. **No comparison against published defenses.** We compare our own configurations, not against Progent, CaMeL, or similar.
@@ -230,10 +228,11 @@ The most transferable result is methodological. Oracle-based evaluation of layer
 ```bash
 pip install -r requirements-dev.txt -r requirements-ml.txt -r scripts/requirements.txt
 python scripts/build_eval_dataset.py      # 744 text examples
-python scripts/build_agent_traces.py      # 37 agent traces
+python scripts/build_agent_traces_v2.py   # 170 agent traces, held-out payloads
 python scripts/train_ml_detector.py       # seeded 60/20/20, trains classifier
 python scripts/compare_baselines.py       # §5.1 head-to-head
-python scripts/run_ablation.py            # §5.2 all 11 configurations
+python scripts/run_ablation.py            # §5.3 all 11 configurations
+python scripts/statistical_validation.py  # §5.2 seeds, McNemar, bootstrap CIs
 pytest tests/ -q                          # 197 tests
 ```
 
