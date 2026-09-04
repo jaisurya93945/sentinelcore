@@ -9,4 +9,5 @@ from app.detectors import obfuscation  # noqa: F401
 from app.detectors import pii  # noqa: F401
 from app.detectors import prompt_injection  # noqa: F401
 from app.detectors import secrets  # noqa: F401
+from app.detectors import semantic  # noqa: F401
 from app.detectors import tool_arguments  # noqa: F401

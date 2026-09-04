@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     upstream_timeout_seconds: float = 60.0
     audit_enabled: bool = True
     audit_db_path: str = "sentinelcore_audit.db"
+    semantic_detector_enabled: bool = False  # optional LLM detector; SENDS TEXT TO A THIRD PARTY
+    semantic_model: str = "gpt-4o-mini"
     ml_detector_enabled: bool = False  # optional learned detector; see app/detectors/ml_classifier/
     api_keys: str = ""  # "key1:role1,key2:role2,..." -- empty means auth disabled
 

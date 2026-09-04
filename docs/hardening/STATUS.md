@@ -33,7 +33,7 @@ Status values: **DONE** (implemented and tested) · **PARTIAL** (real, with a st
 | 25 | Supply-chain security | PARTIAL | Dependency scanning (`pip-audit`) real and blocking in CI. SBOM, container scanning, signed artifacts: not implemented |
 | 26 | Container security | PARTIAL | Non-root, multi-stage, minimal base image: done. Read-only filesystem, dropped capabilities: not added. Still not build-tested |
 | 27 | API security / fuzzing | NOT YET ATTEMPTED | Real, achievable candidate |
-| 28 | Real provider validation | DECLINED, not achievable here | No network access to real LLM providers and no API key in this sandbox |
+| 28 | Real provider validation | **PARTIAL — harness built, not yet executed** | `api.openai.com` is blocked in the dev sandbox (verified: `x-deny-reason: host_not_allowed`), so this cannot run here. A complete turnkey runner exists (`scripts/run_semantic_experiment.py`, `docs/RUN_SEMANTIC_EXPERIMENT.md`) with cost estimation, disk caching and 9 offline tests. Marked NOT RUN rather than done |
 | 29 | Load/performance testing | DECLINED, not achievable with integrity | No realistic load-testing environment here |
 | 30 | Chaos/failure testing | PARTIAL | Audit-log-failure-never-breaks-a-request: tested. Detector/policy exception handling: not tested — directly related to the Section 8 gap above |
 | 31 | Security regression corpus | **PARTIAL — improved** | 744 text examples + 37 agent traces + Attack Replay Lab. Stratified seeded 60/20/20 train/val/**held-out test** split now exists (`dataset/processed/splits.json`); test split used once. Agent traces are self-authored — stated threat to validity |

@@ -1,0 +1,6 @@
+# Optional: LLM-based semantic detector (OFF by default).
+# NOTE: this detector SENDS SCANNED TEXT TO A THIRD-PARTY API. That is a
+# real data-egress decision for a security gateway -- see
+# app/detectors/semantic/detector.py.
+-r requirements.txt
+openai>=1.40.0
