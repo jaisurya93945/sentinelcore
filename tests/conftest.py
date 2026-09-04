@@ -3,6 +3,7 @@
 import pytest
 
 from app.core.config import settings
+from app.services.approvals import init_db as init_approvals
 from app.services.audit_log import init_db
 
 
@@ -13,4 +14,5 @@ def _isolated_audit_db(tmp_path, monkeypatch):
     database file in the repo."""
     monkeypatch.setattr(settings, "audit_db_path", str(tmp_path / "test_audit.db"))
     init_db()
+    init_approvals()
     yield

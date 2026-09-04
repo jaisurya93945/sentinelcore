@@ -20,16 +20,18 @@ tool name, and an allowed tool name doesn't suppress a real finding in
 its arguments.
 """
 
+import hashlib
 import json
 
 from fastapi import APIRouter, Depends
 
 from app.core.auth import Role, require_role
 from app.detectors.registry import get_registered_detectors
-from app.models.finding import Finding, ToolCallRequest, ToolCallResult
+from app.models.finding import Decision, EnforcementStatus, Finding, ToolCallRequest, ToolCallResult
 from app.services.audit_log import log_scan_event
 from app.services.policy_engine import decide, most_severe
 from app.services.risk_engine import calculate_risk_score
+from app.services.approvals import request_approval
 from app.services.tool_policy import authorize_tool
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
@@ -63,5 +65,16 @@ def scan_tool_call(payload: ToolCallRequest) -> ToolCallResult:
         risk_score=risk_score,
         decision=final_decision,
     )
+
+    # HUMAN_APPROVAL used to be returned with nothing behind it. It now
+    # creates a real, queryable approval record. Until a human decides it,
+    # the action is NOT authorised -- and if the store is unavailable the
+    # id is None, which callers must treat as refusal, not as consent.
+    if final_decision == Decision.HUMAN_APPROVAL:
+        digest = hashlib.sha256(json.dumps(payload.arguments, sort_keys=True).encode()).hexdigest()[:16]
+        result.approval_id = request_approval(result.scan_id, payload.tool_name, digest, risk_score)
+        result.enforcement_status = (
+            EnforcementStatus.PENDING_APPROVAL if result.approval_id else EnforcementStatus.NOT_IMPLEMENTED
+        )
     log_scan_event(result.scan_id, "tool_call", risk_score, final_decision.value, findings, detail=payload.tool_name)
     return result

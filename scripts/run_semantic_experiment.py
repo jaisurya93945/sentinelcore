@@ -69,18 +69,32 @@ def collect_texts():
 
 def estimate(texts, trace_texts):
     all_t = [t for _, t, _ in texts] + trace_texts
-    uncached = [t for t in all_t if _cached(_cache_key(t, settings.semantic_model)) is None]
+    # Deduplicate before counting. The cache is keyed by text hash, so a
+    # repeated string is a cache hit on its second occurrence and costs
+    # nothing. Counting raw occurrences overstated the call count by 42%
+    # in the first version of this script -- 441 reported against 255
+    # actually required -- which matters a great deal to anyone working
+    # under a low requests-per-day quota.
+    unique = list(dict.fromkeys(all_t))
+    uncached = [t for t in unique if _cached(_cache_key(t, settings.semantic_model)) is None]
     in_tok = sum(len(t) // 4 + 120 for t in uncached)  # ~4 chars/token + system prompt
     out_tok = 15 * len(uncached)
     cost = in_tok / 1e6 * PRICE_IN + out_tok / 1e6 * PRICE_OUT
-    print(f"model:            {settings.semantic_model}")
-    print(f"total texts:      {len(all_t)}")
-    print(f"already cached:   {len(all_t) - len(uncached)}")
-    print(f"to be requested:  {len(uncached)}")
+    split_unique = len(dict.fromkeys(t for _, t, _ in texts))
+    print(f"model:              {settings.semantic_model}")
+    print(f"text occurrences:   {len(all_t)}")
+    print(f"unique texts:       {len(unique)}  (duplicates are free -- cache is keyed by text)")
+    print(f"already cached:     {len(unique) - len(uncached)}")
+    print(f"TO BE REQUESTED:    {len(uncached)}")
+    print(f"  of which held-out split (--texts-only): {split_unique} unique")
     print(f"est. input tok:   {in_tok:,}")
     print(f"est. output tok:  {out_tok:,}")
-    print(f"ESTIMATED COST:   ${cost:.4f} USD")
+    print(f"ESTIMATED COST:     ${cost:.4f} USD")
     print("\n(list pricing; verify current rates. Cached calls cost nothing on re-run.)")
+    for rpd in (50, 200, 500):
+        days = (len(uncached) + rpd - 1) // rpd
+        split_days = (split_unique + rpd - 1) // rpd
+        print(f"  at {rpd:>3} req/day: {days} day(s) for everything, {split_days} for the split alone")
     return cost
 
 

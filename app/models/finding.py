@@ -41,7 +41,8 @@ class EnforcementStatus(str, Enum):
     NOT_APPLICABLE = "not_applicable"  # decision wasn't SANITIZE -- nothing to enforce
     ENFORCED = "enforced"  # SANITIZE was requested and actually performed; text is now clean
     ESCALATED = "escalated"  # sanitized text was re-scanned and still triggered findings, so the decision was escalated rather than silently allowed
-    NOT_IMPLEMENTED = "not_implemented"  # SANITIZE was requested but no finding type present had a working sanitizer
+    NOT_IMPLEMENTED = "not_implemented"  # the decision was requested but no mechanism could carry it out
+    PENDING_APPROVAL = "pending_approval"  # HUMAN_APPROVAL: a record exists and awaits a human; NOT authorisation
 
 
 class Finding(BaseModel):
@@ -149,6 +150,15 @@ class ToolCallResult(BaseModel):
     decision: Decision = Field(
         default=Decision.ALLOW,
         description="The more severe of tool_authorization and the content-scanning decision.",
+    )
+    enforcement_status: EnforcementStatus = Field(default=EnforcementStatus.NOT_APPLICABLE)
+    approval_id: str | None = Field(
+        default=None,
+        description=(
+            "Set when decision is HUMAN_APPROVAL. Poll GET /api/v1/approvals/{id}; "
+            "the action is authorised ONLY when status is 'approved'. Pending, denied, "
+            "expired and missing all mean not authorised."
+        ),
     )
 
 

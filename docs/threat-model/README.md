@@ -257,6 +257,29 @@ If scikit-learn is absent, the model file is missing, or inference raises, this 
 
 `ml_injection@<origin>` escalation rules are deliberately **not** in the shipped default policy. Finding 5 measured them as net-negative: 0pp attack prevention gained, 20pp benign completion lost, because provenance escalation converts a probabilistic detector's false positives into hard blocks on external content. They remain reproducible as an experimental override in `scripts/run_ablation.py`. Shipping a default the project's own experiment showed to be harmful would contradict the Authenticity Policy.
 
+## Implemented: Human Approval Workflow
+
+**Modules:** `app/services/approvals.py`, `app/api/v1/approvals.py`
+
+`HUMAN_APPROVAL` was previously a decision returned with nothing behind it — the same defect `SANITIZE` had, and worse here, because it is reserved for the highest-consequence actions in the system. A tool call now creates a real, queryable approval record with a lifecycle: `PENDING → APPROVED | DENIED | EXPIRED`.
+
+`ToolCallResult` gains `approval_id` and `enforcement_status`. The action is authorised **only** when status is `approved`; pending, denied, expired, missing, and store-failure all refuse.
+
+### Fail-closed on expiry — the load-bearing decision
+
+An unanswered approval becomes `EXPIRED`, and expiry is a **refusal, not consent**. The alternative would convert an operator being asleep into authorisation for a privileged action, which is precisely what a human-in-the-loop control exists to prevent. It also means a denial-of-service against the approval channel degrades to "nothing executes" rather than "everything executes". A late approval cannot revive an expired record.
+
+### Separation of duty
+
+Deciding an approval requires the **admin** role; the scan endpoints require **operator**. If the role that triggers an action could also authorise it, the control would be decorative.
+
+### Known limitations, stated rather than implied away
+
+- **No notification delivery.** No email, Slack, or pager. Records are created and queryable; getting a human's attention is an integration concern, and shipping a fake one would be theatre.
+- **`decided_by` is unverified.** This project has no identity system to bind it to, so it is an audit annotation, not an authenticated claim. Labelled as such in the API schema.
+- **Expiry is evaluated lazily on read**, not by a scheduler. `expires_at` is authoritative; status catches up when someone looks. Safe only because `PENDING` and `EXPIRED` are both non-permitting — if either permitted execution this would be a vulnerability.
+- **Nothing enforces the approval at execution time.** SentinelCore returns the decision and tracks the record; the calling application must check `permits_execution` before acting. The gateway cannot execute the tool on the caller's behalf, so it cannot make this guarantee for them.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.
