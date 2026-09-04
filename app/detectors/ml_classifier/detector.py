@@ -52,10 +52,25 @@ logger = logging.getLogger(__name__)
 
 MODEL_PATH = Path(__file__).parent.parent.parent.parent / "dataset" / "processed" / "ml_detector.joblib"
 
-# Probability -> severity. Chosen on the VALIDATION split, never the
-# held-out test split.
-HIGH_CONFIDENCE = 0.70
-REPORTING_FLOOR = 0.35
+# Probability -> severity. Derived from scripts/threshold_study.py: 10
+# seeds, thresholds selected on VALIDATION only, evaluated on an untouched
+# TEST split.
+#
+#   REPORTING_FLOOR 0.50 -- the max-F1 threshold averaged 0.46 across seeds
+#       (range 0.25-0.64). 0.50 sits just above that mean, trading a little
+#       recall for materially fewer false positives, which matters because
+#       ambiguous findings are what provenance escalation converts into
+#       hard blocks (docs/research/README.md, Finding 5).
+#   HIGH_CONFIDENCE 0.80 -- the most STABLE low-FPR operating point found:
+#       recall 72.0% [60.4-83.7], FPR 1.1% [0.0-2.5] across 10 seeds. It
+#       beat adaptively selecting a per-seed zero-FPR threshold, which
+#       swung 0.61-0.98 and still landed at 1.1% FPR on test.
+#
+# An earlier single-slice analysis suggested 0.79 achieved exactly 0% FPR.
+# The multi-seed study did not reproduce that: no fixed threshold reliably
+# reaches 0% FPR. These constants are set from the multi-seed result.
+HIGH_CONFIDENCE = 0.80
+REPORTING_FLOOR = 0.50
 
 
 @register_detector

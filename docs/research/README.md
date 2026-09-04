@@ -425,3 +425,49 @@ The sweep comes from a single held-out slice. Twice already in this project a si
 ## A bug found and fixed here
 
 The matched-FPR comparison initially reported the classifier achieving **0.0% recall** at the baseline's FPR, while the sweep table in the same output showed 75.8% at that FPR — a flat self-contradiction. Cause: `roc_curve`'s first point is the degenerate `(fpr=0, tpr=0, threshold=inf)` endpoint, and selecting by nearest-FPR picks it whenever the target FPR is zero. Fixed to take the best recall among points at or below the target. The two contradictory numbers in one output are what surfaced it.
+
+---
+
+# Multi-Seed Threshold Study — a retraction, and a refinement of Finding 5
+
+`python scripts/threshold_study.py`. Closes the item deferred above: thresholds selected on **validation only**, evaluated on an untouched test split, repeated over 10 seeds.
+
+## Retraction: "0% FPR at 78.8% recall" does not reproduce
+
+The single-slice analysis found threshold ≈0.79 achieving 0% FPR at 78.8% recall. Across 10 seeds, the threshold that achieves zero false positives *on validation* ranges from **0.61 to 0.98** (std 0.125) — and applying it to test yields **1.1% FPR, not 0%**, with recall 63.0% [43.8, 91.0].
+
+**No fixed threshold reliably achieves 0% false positives.** That claim is withdrawn.
+
+This is the third single-slice figure this project has had to correct, after 4.84× → 3.10× → 4.78×. The previous entry declined to retune defaults on the single slice precisely because of the earlier two; that caution was correct.
+
+## What replaces it — a stronger claim, properly measured
+
+The most *stable* operating point is a fixed threshold of 0.80, which outperformed adaptively selecting one per seed:
+
+| 10 seeds, mean [95% CI] | Learned @ 0.80 | Rules baseline |
+|---|---|---|
+| **Recall** | **72.0% [60.4, 83.7]** | **18.6% [12.2, 28.7]** |
+| FPR | 1.1% [0.0, 2.5] | 0.5% [0.0, 2.2] |
+
+Recall intervals **do not overlap** — 3.9×, significant. FPR intervals **do overlap** — the increase is not statistically distinguishable. So the classifier does dominate; it simply does not do so at *exactly* zero FPR.
+
+## Shipped defaults now set from this evidence
+
+`REPORTING_FLOOR` 0.35 → **0.50** (validation-selected max-F1 averaged 0.46 across seeds) and `HIGH_CONFIDENCE` 0.70 → **0.80** (the stable low-FPR point). `scripts/run_ablation.py` now imports both from the detector instead of duplicating them, so the experiment can no longer drift from deployed behaviour — it had already silently drifted once.
+
+## Finding 5 refined: provenance's value depends on the detector's operating point
+
+Re-running the ablation with the evidence-based thresholds changes the conclusion materially:
+
+| Thresholds | J (learned) | K (learned + provenance) | Δ APR | Δ BCR |
+|---|---|---|---|---|
+| floor 0.35 / high 0.70 | 94.1% APR, 88.2% BCR | 96.5%, 78.8% | +2.4 | −9.4 |
+| **floor 0.50 / high 0.80** | **78.8% APR, 91.8% BCR** | **90.6%, 84.7%** | **+11.8** | **−7.1** |
+
+With bootstrap CIs: J 0.788 [0.694, 0.871] vs K 0.906 [0.835, 0.965] — **intervals barely overlap at the edges**, a far stronger effect than the +2.4 points measured at the aggressive threshold.
+
+**Finding 5's claim that provenance is net-negative with a real detector was operating-point dependent, not universal.** At an aggressive threshold the detector emits many weak findings, provenance escalates them, and false positives become hard blocks. At a conservative threshold the surviving findings are more reliable, and escalating *those* by provenance buys substantially more prevention for less utility.
+
+This is exactly the mechanism Finding 4 identified — provenance requires the detector to be *precise within the ambiguous band* — now demonstrated by moving the operating point rather than by swapping in an oracle.
+
+The headline comparison for the paper stands and is arguably sharper: an oracle reports **+47.0 points at zero cost**, while a real detector at its best measured operating point reports **+11.8 points at a 7-point utility cost**. Oracle evaluation still overstates the mechanism by roughly 4× and hides its cost entirely.

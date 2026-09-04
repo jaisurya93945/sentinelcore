@@ -40,6 +40,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from app.detectors.ml_classifier.detector import HIGH_CONFIDENCE, REPORTING_FLOOR  # noqa: E402
 from app.detectors.registry import get_registered_detectors  # noqa: E402
 from app.models.finding import Decision, Finding, Severity  # noqa: E402
 from app.services.policy_engine import decide, load_policy, most_severe  # noqa: E402
@@ -113,11 +114,9 @@ def _ml_findings(text: str, origin: str) -> list[Finding]:
     the property Finding 4 identifies as the precondition for provenance
     to matter.
 
-        p >= 0.70  -> HIGH    (confident)
-        p >= 0.35  -> MEDIUM  (ambiguous -- the regime under test)
-        p <  0.35  -> no finding
-
-    Bands were chosen on the VALIDATION split, never the held-out test.
+    Bands are imported from the shipped detector rather than duplicated,
+    so the experiment always reflects deployed behaviour. They were derived
+    by scripts/threshold_study.py (10 seeds, selection on validation only).
     """
     global _ML_MODEL
     if _ML_MODEL is None:
@@ -126,9 +125,9 @@ def _ml_findings(text: str, origin: str) -> list[Finding]:
         _ML_MODEL = joblib.load(Path(__file__).parent.parent / "dataset" / "processed" / "ml_detector.joblib")
 
     p = float(_ML_MODEL.predict_proba([text])[0][1])
-    if p < 0.35:
+    if p < REPORTING_FLOOR:
         return []
-    sev = Severity.HIGH if p >= 0.70 else Severity.MEDIUM
+    sev = Severity.HIGH if p >= HIGH_CONFIDENCE else Severity.MEDIUM
     f = Finding(
         detector="ml_classifier",
         type="ml_injection",
