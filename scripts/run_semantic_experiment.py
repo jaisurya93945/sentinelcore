@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.core.config import settings  # noqa: E402
-from app.detectors.semantic.detector import CACHE_DIR, _cache_key, _cached, classify  # noqa: E402
+from app.detectors.semantic.detector import RateLimited, _cache_key, _cached, classify  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
 EVAL = ROOT / "dataset" / "processed" / "eval_set.jsonl"
@@ -87,6 +87,12 @@ def estimate(texts, trace_texts):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--estimate", action="store_true", help="print cost estimate and exit without spending")
+    ap.add_argument("--limit", type=int, default=0,
+                    help="stop after N NEW api calls this run (0 = no cap). Use to stay under a daily quota.")
+    ap.add_argument("--texts-only", action="store_true",
+                    help="classify only the held-out split (the headline detection result), skip trace warming")
+    ap.add_argument("--delay", type=float, default=0.0,
+                    help="seconds to sleep between new calls; use if hitting per-minute limits")
     args = ap.parse_args()
 
     texts, trace_texts = collect_texts()
@@ -103,15 +109,45 @@ def main():
     print(f"\nProceeding. Ctrl-C now to abort.\n")
     settings.semantic_detector_enabled = True
 
+    import time as _time
+
+    new_calls = 0
+    quota_hit = False
+
+    def _classify(text):
+        """Returns (p, stop). Counts only NEW calls against --limit, since
+        cache hits cost nothing and shouldn't consume the budget."""
+        nonlocal new_calls, quota_hit
+        cached = _cached(_cache_key(text, settings.semantic_model))
+        if cached is not None:
+            return cached, False
+        if args.limit and new_calls >= args.limit:
+            return None, True
+        try:
+            p = classify(text, raise_on_rate_limit=True)
+        except RateLimited as e:
+            if e.daily:
+                quota_hit = True
+                return None, True
+            return None, True
+        new_calls += 1
+        if args.delay:
+            _time.sleep(args.delay)
+        return p, False
+
     # ---- 1. detection head-to-head on the held-out split ----
     print("Classifying held-out split...")
     tp = fp = tn = fn = 0
     probs = []
+    missing = 0
     for i, (rid, text, label) in enumerate(texts, 1):
-        p = classify(text)
+        p, stop = _classify(text)
+        if stop:
+            missing = len(texts) - i + 1
+            break
         if p is None:
-            print(f"  aborted at {i}/{len(texts)}: classifier unavailable")
-            sys.exit(1)
+            missing += 1
+            continue
         probs.append({"id": rid, "p": p, "label": label})
         hit = p >= 0.5
         if hit and label: tp += 1
@@ -119,14 +155,28 @@ def main():
         elif label: fn += 1
         else: tn += 1
         if i % 25 == 0:
-            print(f"  {i}/{len(texts)}")
+            print(f"  {i}/{len(texts)}  (new api calls this run: {new_calls})")
+
+    if missing:
+        reason = "daily quota exhausted" if quota_hit else "run limit reached"
+        print(f"\n  PARTIAL: {len(probs)}/{len(texts)} classified, {missing} outstanding ({reason}).")
+        print(f"  Everything classified so far is CACHED -- re-running will not re-request it.")
+        print(f"  Resume later with the same command; only the {missing} outstanding will be requested.")
+        if len(probs) < 30:
+            print("\n  Too few results to report meaningful metrics. Stopping.")
+            sys.exit(2)
+        print(f"  Reporting metrics on the {len(probs)} classified so far -- these are PARTIAL")
+        print(f"  and not comparable to the full-split numbers until the run completes.")
 
     prec = tp / (tp + fp) if (tp + fp) else 0.0
     rec = tp / (tp + fn) if (tp + fn) else 0.0
     result = {
         "model": settings.semantic_model,
+        "partial": bool(missing),
+        "outstanding": missing,
+        "new_api_calls_this_run": new_calls,
         "detection": {
-            "n": len(texts), "precision": round(prec, 4), "recall": round(rec, 4),
+            "n": len(probs), "precision": round(prec, 4), "recall": round(rec, 4),
             "f1": round(2 * prec * rec / (prec + rec), 4) if (prec + rec) else 0.0,
             "fpr": round(fp / (fp + tn), 4) if (fp + tn) else 0.0,
             "confusion": {"tp": tp, "fp": fp, "tn": tn, "fn": fn},
@@ -143,11 +193,23 @@ def main():
     print("    learned @0.80    recall 72.0% [60.4, 83.7]   fpr 1.1%")
 
     # ---- 2. warm the cache for the agent traces ----
-    print(f"\nWarming cache for {len(trace_texts)} trace texts...")
-    for i, t in enumerate(trace_texts, 1):
-        classify(t)
-        if i % 50 == 0:
-            print(f"  {i}/{len(trace_texts)}")
+    if args.texts_only:
+        print("\n--texts-only: skipping trace warming.")
+    elif missing:
+        print("\nSkipping trace warming: finish the held-out split first.")
+    else:
+        print(f"\nWarming cache for {len(trace_texts)} trace texts...")
+        warmed_stop = False
+        for i, t in enumerate(trace_texts, 1):
+            _, stop = _classify(t)
+            if stop:
+                print(f"  stopped at {i}/{len(trace_texts)} -- cached so far is preserved; re-run to continue.")
+                warmed_stop = True
+                break
+            if i % 50 == 0:
+                print(f"  {i}/{len(trace_texts)}  (new api calls this run: {new_calls})")
+        if not warmed_stop:
+            print("  trace cache complete.")
 
     OUT.write_text(json.dumps(result, indent=2))
     print(f"\nwritten to {OUT}")

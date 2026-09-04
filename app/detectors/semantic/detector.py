@@ -46,6 +46,8 @@ import hashlib
 import json
 import logging
 import os
+import random
+import time
 from pathlib import Path
 
 from app.core.config import settings
@@ -95,9 +97,35 @@ def _store(key: str, p: float) -> None:
         logger.debug(f"semantic cache write failed: {e}")
 
 
-def classify(text: str, model: str | None = None) -> float | None:
+class RateLimited(Exception):
+    """Raised when the provider refuses due to rate limiting rather than a
+    genuine failure. Distinguished from other errors on purpose: a
+    per-minute limit means 'wait', while a per-DAY limit means 'stop and
+    resume tomorrow' -- and treating those the same wastes either time or
+    the caller's remaining quota."""
+
+    def __init__(self, message: str, daily: bool):
+        super().__init__(message)
+        self.daily = daily
+
+
+def _is_daily_limit(msg: str) -> bool:
+    m = msg.lower()
+    return "per day" in m or "rpd" in m
+
+
+def classify(text: str, model: str | None = None, max_retries: int = 5,
+             raise_on_rate_limit: bool = False) -> float | None:
     """Returns P(injection) in [0,1], or None if unavailable.
-    Cached; a cache hit costs nothing and makes no network call."""
+
+    Cached; a cache hit costs nothing and makes no network call. Results
+    are written to the cache as each call succeeds, so an interrupted run
+    resumes without re-paying for work already done.
+
+    Retries 429s with exponential backoff and jitter. A per-DAY limit is
+    not retried -- no amount of waiting inside one process fixes a daily
+    quota, and retrying burns the caller's time for nothing.
+    """
     model = model or settings.semantic_model
     key = _cache_key(text, model)
 
@@ -109,27 +137,50 @@ def classify(text: str, model: str | None = None) -> float | None:
     if not api_key:
         return None
 
-    try:
-        from openai import OpenAI
+    from openai import OpenAI
 
-        client = OpenAI(api_key=api_key)
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": text[:4000]},
-            ],
-            temperature=0,
-            max_tokens=20,
-            response_format={"type": "json_object"},
-        )
-        p = float(json.loads(resp.choices[0].message.content)["p"])
-        p = max(0.0, min(1.0, p))
-        _store(key, p)
-        return p
-    except Exception as e:
-        logger.warning(f"semantic detector call failed, skipping this input: {e}")
-        return None
+    client = OpenAI(api_key=api_key)
+
+    for attempt in range(max_retries):
+        try:
+            resp = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": text[:4000]},
+                ],
+                temperature=0,
+                max_tokens=20,
+                response_format={"type": "json_object"},
+            )
+            p = float(json.loads(resp.choices[0].message.content)["p"])
+            p = max(0.0, min(1.0, p))
+            _store(key, p)
+            return p
+
+        except Exception as e:
+            msg = str(e)
+            rate_limited = "429" in msg or "rate limit" in msg.lower()
+
+            if rate_limited and _is_daily_limit(msg):
+                if raise_on_rate_limit:
+                    raise RateLimited(msg, daily=True) from e
+                logger.warning("semantic detector: daily request quota exhausted")
+                return None
+
+            if rate_limited and attempt < max_retries - 1:
+                delay = min(60.0, (2 ** attempt) + random.uniform(0, 1))
+                logger.info(f"rate limited, retrying in {delay:.1f}s ({attempt + 1}/{max_retries})")
+                time.sleep(delay)
+                continue
+
+            if rate_limited and raise_on_rate_limit:
+                raise RateLimited(msg, daily=False) from e
+
+            logger.warning(f"semantic detector call failed, skipping this input: {e}")
+            return None
+
+    return None
 
 
 @register_detector

@@ -8,6 +8,36 @@ It tests the paper's central mechanism with a **third detector class**. Findings
 
 **The prediction, recorded before running:** a stronger semantic detector should **not** automatically make provenance more valuable — it should move where the useful operating point sits. If instead the provenance gain simply grows with detector quality, **§5.4 of the paper is wrong and must be rewritten.** Both outcomes are worth reporting; the second is the more interesting one.
 
+## If you hit a 429 (daily request limit)
+
+**Your cached results are safe.** Every classification is written to disk the moment it succeeds, so an interrupted run loses nothing but the outstanding calls. Re-running the same command requests only what is missing.
+
+The runner now distinguishes a **per-minute** limit (retried automatically with exponential backoff) from a **per-day** quota (not retried — no amount of waiting inside one process fixes a daily cap).
+
+Three ways forward, cheapest first:
+
+1. **Resume tomorrow.** Same command. Only the outstanding calls are requested.
+   ```bash
+   python scripts/run_semantic_experiment.py            # resumes from cache
+   ```
+
+2. **Split it across days with `--limit`**, staying under your quota:
+   ```bash
+   python scripts/run_semantic_experiment.py --limit 40 --texts-only
+   ```
+   `--texts-only` does just the held-out split — that is the headline detection result and only needs 149 calls total. Trace warming (another ~292) can wait.
+
+3. **Add minimum credit to the account.** Free-tier accounts have very low requests-per-day caps. A small prepaid balance moves the account to the first paid tier, where per-day limits rise by orders of magnitude. The experiment itself costs **under two cents** — the limit is the obstacle, not the price.
+
+If you are hitting *per-minute* rather than per-day limits, add `--delay 1` to space the calls out.
+
+## Changing the model
+
+```bash
+SENTINELCORE_SEMANTIC_MODEL=gpt-4o python scripts/run_semantic_experiment.py
+```
+Note this changes the cache key, so switching models means paying for the calls again. It does **not** help with a daily request cap, which is account-level rather than per-model.
+
 ## Steps
 
 ```bash
