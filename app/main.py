@@ -3,6 +3,7 @@ from fastapi import FastAPI
 import app.detectors  # noqa: F401  -- importing this triggers detector self-registration
 from app.api.v1 import approvals, audit, dashboard, health, mcp, proxy, scan, tool_call
 from app.core.config import settings
+from app.core.middleware import resource_protection_middleware
 from app.services.approvals import init_db as init_approvals
 from app.services.audit_log import init_db
 
@@ -14,6 +15,8 @@ app = FastAPI(
 
 init_db()
 init_approvals()
+
+app.middleware("http")(resource_protection_middleware)
 
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(scan.router, prefix="/api/v1", tags=["scan"])

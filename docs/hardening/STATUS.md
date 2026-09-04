@@ -12,7 +12,7 @@ Status values: **DONE** (implemented and tested) · **PARTIAL** (real, with a st
 | 4 | Claims must be verified | DONE | `docs/CAPABILITY_MATRIX.md` classifies every capability |
 | 5 | **Authentication** | **DONE** | `app/core/auth.py`, off by default, tested end-to-end incl. live demo |
 | 6 | **Authorization** | **DONE** | 3 roles (viewer/operator/admin), collapsed from the spec's 5 — reasoning stated in `auth.py`'s own docstring |
-| 7 | Rate limiting | NOT YET ATTEMPTED | Real, achievable candidate — no new dependency needed |
+| 7 | Rate limiting | **PARTIAL — real, off by default** | `app/core/limits.py` + middleware: fixed-window counter keyed by API key (IP fallback), plus a `Content-Length` payload cap checked before the body is read. 14 tests. Stated limits: fixed window permits 2x nominal across a boundary, state is PER WORKER PROCESS not per deployment (no shared store), IP is a weak identity. Not a WAF |
 | 8 | Reverse proxy hardening | PARTIAL | Timeout config exists and is enforced. Fail-open/fail-closed behavior is currently **undefined** — detector exceptions are unhandled and would crash the request with a raw 500. Circuit breakers, retry logic: not implemented |
 | 9 | Streaming security | PARTIAL | SSE parsing, mid-stream cutoff, chunk-boundary leak limitation: done and documented. UTF-8 mid-character boundaries: not explicitly tested. Latency/memory/CPU: not measured |
 | 10 | Input security | DONE | Existing, continuously refined via real evaluation |

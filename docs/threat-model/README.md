@@ -280,6 +280,24 @@ Deciding an approval requires the **admin** role; the scan endpoints require **o
 - **Expiry is evaluated lazily on read**, not by a scheduler. `expires_at` is authoritative; status catches up when someone looks. Safe only because `PENDING` and `EXPIRED` are both non-permitting — if either permitted execution this would be a vulnerability.
 - **Nothing enforces the approval at execution time.** SentinelCore returns the decision and tracks the record; the calling application must check `permits_execution` before acting. The gateway cannot execute the tool on the caller's behalf, so it cannot make this guarantee for them.
 
+## Implemented: Resource Protection (rate limiting + payload caps)
+
+**Modules:** `app/core/limits.py`, `app/core/middleware.py`
+
+A security gateway is itself a target. Regex scanning is linear in input length, the streaming path re-scans accumulated text, and the proxy forwards to a **paid** upstream — so an attacker who cannot get anything *past* the gateway can still take it down or run up the operator's provider bill. **Denial of wallet, not just denial of service.**
+
+Two controls, ordered deliberately: payload size is checked from `Content-Length` **before the body is read**, then the rate counter, **before routing** — so a limited client costs one dictionary lookup rather than a full detector pass.
+
+### Honest limitations, none of them incidental
+
+- **Fixed window, not sliding or token bucket.** A fixed window permits up to **2× the nominal rate** across a window boundary. Real weakness, stated rather than hidden.
+- **State is per worker process, not per deployment.** Four uvicorn workers means four times the configured limit. This is the honest ceiling of a dependency-free implementation; a genuine distributed limit needs shared state (Redis or equivalent) which this project does not have and will not pretend to. **Divide the configured limit by worker count.**
+- **IP is a weak identity.** The limiter prefers the API key, which survives NAT and shared egress. The IP fallback is trivially shared behind one NAT and spoofable behind a proxy that does not set a trustworthy forwarded header.
+- **Off by default.** A limiter tuned wrong causes an outage, so the operator opts in.
+- **Not a WAF or DDoS protection.** This is a last-resort guard for a process that would otherwise have none, not a substitute for a load balancer doing this properly.
+
+Health checks are exempt: rate-limiting them would let load convince an orchestrator that a healthy service is down, turning a protection into an outage amplifier. The API key is truncated before it enters limiter state, so full credentials never reach that structure.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.

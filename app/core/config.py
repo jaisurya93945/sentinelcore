@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     upstream_timeout_seconds: float = 60.0
     audit_enabled: bool = True
     audit_db_path: str = "sentinelcore_audit.db"
+    # Resource protection. OFF by default: a limiter tuned wrong causes an
+    # outage, so the operator opts in. Limits are PER WORKER PROCESS --
+    # divide by worker count. See app/core/limits.py.
+    rate_limit_enabled: bool = False
+    rate_limit_requests: int = 120
+    rate_limit_window_seconds: int = 60
+    max_request_bytes: int = 1_000_000  # 1MB; scanning cost is linear in input length
     approval_ttl_seconds: int = 3600  # unanswered approvals EXPIRE, and expiry is a refusal
     semantic_detector_enabled: bool = False  # optional LLM detector; SENDS TEXT TO A THIRD PARTY
     semantic_model: str = "gpt-4o-mini"

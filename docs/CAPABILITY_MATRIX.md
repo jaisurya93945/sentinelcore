@@ -29,6 +29,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Learned classifier detector (optional, off by default) | `tests/unit/test_ml_detector.py`; head-to-head on identical held-out split (`scripts/compare_baselines.py`): recall 27.54% -> 85.51% (3.10x), FPR 0.00% -> 5.00% |
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
 | Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). NOT YET RUN against a live API -- blocked in the dev sandbox; turnkey runner in `docs/RUN_SEMANTIC_EXPERIMENT.md`, est. cost ~$0.02 |
+| Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
+| Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests |
 | Statistical validation (10 seeds, McNemar, bootstrap CIs) | `scripts/statistical_validation.py`. Detection-recall finding solid (10/10 seeds, p<5.6e-6, non-overlapping CIs); agent-benchmark findings are not |
 | Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
 | Docker (multi-stage, non-root) | Not build-tested -- flagged in the file itself |
@@ -57,7 +59,7 @@ Conflicting-instruction detection · source trust/provenance tracking · sanitiz
 ## 4. Security Gaps (stated plainly)
 
 - **Authentication is real but off by default.** No keys configured means every endpoint is open -- documented, not hidden, but still a real risk if deployed network-reachable without configuring `SENTINELCORE_API_KEYS`.
-- **No rate limiting** -- nothing stops a client from exhausting resources with scan requests.
+- **Rate limiting exists but is off by default and per-process.** `app/core/limits.py` implements a fixed-window limiter and payload cap; enabling is the operator's choice. State is per worker process, so multi-worker deployments must divide the configured limit. Not a substitute for a real edge limiter.
 - Detector coverage is **English-pattern regex only** -- confirmed by evaluation (near-zero recall on German/Spanish/Chinese examples).
 - **No semantic/ML detection anywhere** -- deterministic rules/regex by design, with the honest recall ceiling that implies (17.68% on the real benchmark).
 - **No key rotation, revocation, or per-key rate limiting.**
