@@ -34,6 +34,7 @@ rules:
   # firing is not on its own grounds to block, which is precisely why
   # provenance has something to decide.
   ml_injection: warn
+  semantic_injection: warn
 
 # Origin-conditioned rules, checked BEFORE the flat rules above.
 # Key format: <finding_type>@<origin_prefix>

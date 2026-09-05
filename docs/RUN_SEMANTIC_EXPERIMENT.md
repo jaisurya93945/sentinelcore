@@ -51,8 +51,13 @@ python scripts/run_semantic_experiment.py --estimate
 # 2. Run it (responses cached to disk; re-runs are free)
 python scripts/run_semantic_experiment.py
 
-# 3. Re-run the ablation with the semantic detector active
-SENTINELCORE_SEMANTIC_DETECTOR_ENABLED=true python scripts/run_ablation.py
+# 3. Re-run the ablation -- do NOT set the env var
+python scripts/run_ablation.py
+#    Semantic is now configs L and M, controlled by the ablation itself.
+#    Setting SENTINELCORE_SEMANTIC_DETECTOR_ENABLED would leak the detector
+#    into EVERY config including the rules-only baseline and invalidate the
+#    comparison -- that bug is fixed, but the env var is still the wrong
+#    control here. L/M read from the on-disk cache, so this costs nothing.
 
 # 4. Confidence intervals on the new configurations
 python scripts/statistical_validation.py

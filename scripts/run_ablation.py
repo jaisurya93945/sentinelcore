@@ -81,6 +81,11 @@ CONFIGS = {
     # outside simulation.
     "J_ml_flat": {"provenance": False, "tool_authz": True, "origin_rules": False, "ml": True},
     "K_ml_prov": {"provenance": True, "tool_authz": True, "origin_rules": True, "ml": True},
+    # Semantic detector as its OWN condition, not bolted onto every config.
+    # Requires a warm cache (scripts/run_semantic_experiment.py); with no
+    # cache these degrade to the rules baseline rather than erroring.
+    "L_semantic_flat": {"provenance": False, "tool_authz": True, "origin_rules": False, "semantic": True},
+    "M_semantic_prov": {"provenance": True, "tool_authz": True, "origin_rules": True, "semantic": True},
 }
 
 
@@ -93,6 +98,11 @@ EXPERIMENTAL_ML_ORIGIN_RULES = {
     "ml_injection@tool_description": "block",
     "ml_injection@tool_arguments": "block",
     "ml_injection@input": "warn",
+    "semantic_injection@context": "block",
+    "semantic_injection@tool_response": "block",
+    "semantic_injection@tool_description": "block",
+    "semantic_injection@tool_arguments": "block",
+    "semantic_injection@input": "warn",
 }
 
 
@@ -166,9 +176,24 @@ def _oracle_findings(ev: dict, origin: str, severity: Severity) -> list[Finding]
     return [f]
 
 
+# Detectors that are OPTIONAL and config-controlled. They must never be
+# picked up implicitly by the base scan, or every configuration silently
+# includes them and the ablation stops isolating anything.
+#
+# This was a real bug: with SENTINELCORE_SEMANTIC_DETECTOR_ENABLED=true the
+# semantic detector fired inside _scan for EVERY config, so the "rules
+# only" baseline A became "rules + semantic" and its APR jumped from 28.2%
+# to 62.4%. Every comparison in that run was between contaminated
+# conditions. The env var controls the SHIPPED gateway; the ablation must
+# control its own conditions explicitly.
+_OPTIONAL_DETECTORS = {"ml_classifier", "semantic"}
+
+
 def _scan(text: str, origin: str) -> list[Finding]:
     findings: list[Finding] = []
-    for cls in get_registered_detectors().values():
+    for name, cls in get_registered_detectors().items():
+        if name in _OPTIONAL_DETECTORS:
+            continue
         detected = cls().detect(text)
         for f in detected:
             f.origin = origin
@@ -176,7 +201,24 @@ def _scan(text: str, origin: str) -> list[Finding]:
     return findings
 
 
-def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False, oracle: Severity | None = None, ml: bool = False) -> Decision:
+def _semantic_findings(text: str, origin: str) -> list[Finding]:
+    """Semantic detector as an explicit ablation condition. Reads from the
+    on-disk cache, so this costs nothing once the cache is warm."""
+    from app.core.config import settings as _s
+    from app.detectors.semantic.detector import SemanticDetector
+
+    prev = _s.semantic_detector_enabled
+    _s.semantic_detector_enabled = True
+    try:
+        found = SemanticDetector().detect(text)
+    finally:
+        _s.semantic_detector_enabled = prev
+    for f in found:
+        f.origin = origin
+    return found
+
+
+def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origin_rules: bool = False, oracle: Severity | None = None, ml: bool = False, semantic: bool = False) -> Decision:
     """Replays one trace, returning the most severe decision reached."""
     decisions: list[Decision] = []
     doc_index = 0
@@ -213,10 +255,13 @@ def evaluate_trace(events: list[dict], provenance: bool, tool_authz: bool, origi
         if ml:
             text_for_ml = ev.get("text") or json.dumps(ev.get("arguments", {}))
             findings = findings + _ml_findings(text_for_ml, origin)
+        if semantic:
+            text_for_sem = ev.get("text") or json.dumps(ev.get("arguments", {}))
+            findings = findings + _semantic_findings(text_for_sem, origin)
 
         score = calculate_risk_score(findings, use_origin_trust=provenance)
         global _EXPERIMENTAL_POLICY
-        if ml and origin_rules:
+        if (ml or semantic) and origin_rules:
             if _EXPERIMENTAL_POLICY is None:
                 _EXPERIMENTAL_POLICY = _policy_with_experimental_rules()
             local.append(decide(findings, score, policy=_EXPERIMENTAL_POLICY, use_origin_rules=True))
@@ -244,7 +289,7 @@ def main():
         by_category = defaultdict(lambda: {"total": 0, "prevented": 0})
 
         for s in attacks:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"), cfg.get("ml", False))
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"), cfg.get("ml", False), cfg.get("semantic", False))
             ok = d in BLOCKING
             prevented += ok
             by_category[s["category"]]["total"] += 1
@@ -252,7 +297,7 @@ def main():
             per_scenario[s["id"]][cfg_name] = d.value
 
         for s in benign:
-            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"), cfg.get("ml", False))
+            d = evaluate_trace(s["events"], cfg["provenance"], cfg["tool_authz"], cfg["origin_rules"], cfg.get("oracle"), cfg.get("ml", False), cfg.get("semantic", False))
             ok = d not in BLOCKING
             completed += ok
             per_scenario[s["id"]][cfg_name] = d.value

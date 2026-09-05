@@ -471,3 +471,40 @@ With bootstrap CIs: J 0.788 [0.694, 0.871] vs K 0.906 [0.835, 0.965] — **inter
 This is exactly the mechanism Finding 4 identified — provenance requires the detector to be *precise within the ambiguous band* — now demonstrated by moving the operating point rather than by swapping in an oracle.
 
 The headline comparison for the paper stands and is arguably sharper: an oracle reports **+47.0 points at zero cost**, while a real detector at its best measured operating point reports **+11.8 points at a 7-point utility cost**. Oracle evaluation still overstates the mechanism by roughly 4× and hides its cost entirely.
+
+---
+
+# Finding 6 — a TF-IDF classifier outperformed gpt-4o-mini on this task
+
+Run on the same held-out split (n=149) that every other detector is measured on:
+
+| Detector | Precision | Recall | F1 | FPR |
+|---|---|---|---|---|
+| Rules baseline | ~97% | **18.6%** [12.2, 28.7] | 30.8% | 0.5% |
+| **Learned (TF-IDF + logreg) @0.80** | ~100% | **72.0%** [60.4, 83.7] | — | 1.1% |
+| **Semantic (gpt-4o-mini, zero-shot)** | **97.44%** | **55.07%** | 70.37% | 1.25% |
+
+A logistic regression over character and word n-grams, trained in seconds and costing nothing to run, **recalled substantially more attacks than a frontier-lab model** — at comparable precision and false-positive rate.
+
+## Four caveats, because this result is easy to over-read
+
+1. **The comparison is not fully fair, and the unfairness favours the classifier.** The learned model was *trained on the deepset training split*; the semantic detector is *zero-shot*. The classifier has an in-distribution advantage on exactly this corpus, which is the single biggest confound. Cross-source transfer testing showed the classifier generalises to pr1m8 (93.9% recall), so it is not pure memorisation — but a like-for-like comparison would give the LLM in-domain examples too.
+2. **The prompt is deliberately minimal.** No chain-of-thought, no few-shot examples, no multi-sample voting. This was a stated design choice: the comparison of interest is detector *class*, and a tuned prompt would improve the numbers while weakening the experiment. A better prompt would very likely raise recall.
+3. **The operating point was never tuned.** The learned classifier's threshold came from a 10-seed validation study; the semantic detector was run at 0.5 with no tuning at all. Its high precision (97.44%) and low FPR (1.25%) suggest it is sitting conservatively, and a lower threshold would trade precision for recall.
+4. **gpt-4o-mini is a small model.** A larger one may behave differently. This is a single model at a single price point, not a claim about LLM detection in general.
+
+## What it does support
+
+The conservative claim survives all four caveats: **for this deterministic, high-volume, latency- and cost-sensitive classification task, an LLM is not automatically the stronger choice**, and a cheap local model is a serious baseline rather than a strawman. That matters for a gateway, where every request pays the detector's cost and a third-party call is also a data-egress event.
+
+It also strengthens Finding 4's framing. Detector *class* is not a proxy for detector *quality*, and "add an LLM" is not a free improvement — which is exactly why this project requires new detectors to be benchmarked against the existing baseline rather than assumed better.
+
+# An experimental-design bug this run exposed
+
+The first ablation run with the semantic detector enabled produced a table where **every configuration improved**, including `A_content_only`, which jumped from 28.2% to 62.4%.
+
+Cause: `_scan()` in `run_ablation.py` iterated *all registered detectors*. Setting `SENTINELCORE_SEMANTIC_DETECTOR_ENABLED=true` — the correct way to enable it in the shipped gateway — also made it fire inside every ablation condition. The "rules only" baseline silently became "rules + semantic", and every comparison in that table was between contaminated conditions.
+
+**The environment variable controls the shipped gateway; the ablation must control its own conditions explicitly.** Optional detectors (`ml_classifier`, `semantic`) are now excluded from the base scan and appear only via explicit config flags. Configs `L_semantic_flat` and `M_semantic_prov` were added as proper conditions.
+
+The give-away was that the baseline moved. **In a correct ablation the baseline is fixed by definition** — if config A changes when you enable something A is not supposed to include, the isolation is broken. That is a useful general check, and it is worth stating because the contaminated table looked entirely plausible.
