@@ -8,7 +8,7 @@
 
 Defenses for LLM agents increasingly layer provenance tracking and authority enforcement on top of a content detector. We evaluate this layering directly, using an 11-configuration ablation over an agent-trace benchmark, and report three results that complicate the prevailing design.
 
-First, **detection recall dominates**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 0.282 to 0.788, a larger gain than any policy mechanism we tested.
+First, **detector *class* is not a proxy for detector quality**: a TF-IDF logistic regression recalled more attacks (72.0%) than a zero-shot LLM classifier (55.07%) at comparable precision, though the comparison favours the trained model through its in-domain advantage. And **detection recall dominates policy**: replacing a hand-written rules detector with a learned classifier raises recall from 0.185 to 0.884 (10 seeds, non-overlapping 95% CIs, McNemar p < 5.6×10⁻⁶ on every seed) and raises agent-level attack prevention from 0.282 to 0.788, a larger gain than any policy mechanism we tested.
 
 Second, **provenance-aware escalation is not free, and its apparent value depends on how detection is simulated.** Under a ground-truth oracle at ambiguous confidence, provenance improves attack prevention by **47.0 points (0.365 → 0.835, non-overlapping 95% CIs)** at no utility cost. Under a real classifier the same mechanism yields at most **+11.8 points, at the edge of statistical resolution**, and always charges benign task completion for it (−7.1 points). Its value further depends on the detector's operating point: at a more aggressive threshold the gain falls to +2.4 points while the cost rises to −9.4.
 
@@ -175,6 +175,22 @@ Recall intervals do not overlap (3.9×, significant); FPR intervals do overlap, 
 
 Shipped detector thresholds are set from this study (reporting floor 0.50, high-confidence 0.80), not from the single slice.
 
+#### 5.1.3 A third detector class: semantic classification
+
+A zero-shot LLM classifier (gpt-4o-mini, single call, minimal prompt) evaluated on the same held-out split:
+
+| Detector | Precision | Recall | F1 | FPR |
+|---|---|---|---|---|
+| Rules | ~97% | 18.6% [12.2, 28.7] | 30.8% | 0.5% |
+| Learned (TF-IDF + logreg) @0.80 | ~100% | **72.0%** [60.4, 83.7] | — | 1.1% |
+| Semantic (gpt-4o-mini, zero-shot) | 97.44% | **55.07%** | 70.37% | 1.25% |
+
+**The learned classifier recalled more attacks than the LLM at comparable precision.** We report this cautiously, and the largest confound favours our own model: the classifier was *trained on the in-domain training split* while the semantic detector is *zero-shot*, so it holds a distribution advantage on this corpus. Cross-source testing (§5.1.1) shows the classifier is not merely memorising — it transfers to an unseen source at 93.9% recall — but a like-for-like comparison would supply the LLM with in-domain examples.
+
+Three further caveats: the prompt is deliberately minimal (no chain-of-thought, few-shot, or multi-sample voting), by the same reasoning that keeps the comparison about detector *class* rather than prompt engineering; the semantic operating point was never tuned, where the classifier's threshold came from a 10-seed validation study; and gpt-4o-mini is one small model at one price point.
+
+The claim that survives all of these is narrow but useful: **for deterministic, high-volume, cost- and latency-sensitive classification, an LLM is not automatically the stronger choice, and a cheap local model is a serious baseline rather than a strawman.** For a gateway this matters twice over, since every request pays the detector's cost and a third-party call is additionally a data-egress event.
+
 ### 5.2 Statistical validation
 
 10 independent stratified splits, McNemar's exact test for the paired classifier comparison, and 10,000-sample bootstrap CIs for the agent-benchmark rates. Reproduce with `scripts/statistical_validation.py`.
@@ -235,6 +251,14 @@ An oracle has **zero false positives by construction**. That is precisely the pr
 **We acted on this internally:** the provenance-escalation rules for the learned detector are deliberately **not** in our shipped default policy, because our own experiment measured them as net-negative. They remain reproducible as an experimental override.
 
 ---
+
+### 6.1 A methodological note: check that your baseline does not move
+
+Enabling the semantic detector through its environment variable — the correct way to enable it in the deployed gateway — also injected it into every ablation condition, because the scan function iterated all registered detectors. The resulting table showed **every configuration improving**, including the rules-only baseline, which rose from 28.2% to 62.4% APR. Every comparison in it was between contaminated conditions, and it looked entirely plausible.
+
+The detectable signature was that **the baseline moved**. In a correctly isolated ablation the baseline condition is fixed by construction; if it shifts when you enable something it is defined not to include, isolation is broken regardless of how sensible the rest of the table appears. We now assert this invariant in the test suite rather than relying on noticing it.
+
+This generalises beyond our system: any evaluation where a component can be enabled both globally and per-condition is exposed to the same failure, and the check is cheap.
 
 ## 7. Limitations and Threats to Validity
 

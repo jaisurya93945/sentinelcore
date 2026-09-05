@@ -28,9 +28,10 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Provenance-aware risk scoring (origin trust multipliers) | `tests/unit/test_origin_trust.py` -- verified to change actual decisions, with an ablation off-switch |
 | Learned classifier detector (optional, off by default) | `tests/unit/test_ml_detector.py`; head-to-head on identical held-out split (`scripts/compare_baselines.py`): recall 27.54% -> 85.51% (3.10x), FPR 0.00% -> 5.00% |
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
-| Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). NOT YET RUN against a live API -- blocked in the dev sandbox; turnkey runner in `docs/RUN_SEMANTIC_EXPERIMENT.md`, est. cost ~$0.02 |
+| Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). **RUN against a live API**: precision 97.44% recall 55.07% FPR 1.25% on the held-out split -- lower recall than the TF-IDF classifier's 72.0%. See Finding 6 |
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
 | Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests |
+| Ablation isolation guards | `tests/unit/test_ablation_isolation.py` -- 6 tests asserting the baseline cannot move when optional detectors are enabled |
 | Statistical validation (10 seeds, McNemar, bootstrap CIs) | `scripts/statistical_validation.py`. Detection-recall finding solid (10/10 seeds, p<5.6e-6, non-overlapping CIs); agent-benchmark findings are not |
 | Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
 | Docker (multi-stage, non-root) | Not build-tested -- flagged in the file itself |
