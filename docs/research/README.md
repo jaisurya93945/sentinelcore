@@ -672,3 +672,24 @@ None of these are free, and all of them multiply the per-request cost of a detec
 **Top-20 truncation.** When `YES` does not appear among the top 20 alternatives the implementation computes `1 − P(NO)`, which floors to 0.0 for sufficiently small values. Some of the 37 zeros are therefore "very small" rather than exactly zero. This does not affect the conclusion — all of them sit far below the 0.50 reporting floor — but the distribution is marginally less degenerate than the histogram suggests.
 
 **One model, one task, temperature 0.** A larger model, a multi-token rationale, or sampling at temperature > 0 could all behave differently. Temperature 0 was chosen for reproducibility, and it is plausibly the direct cause of the saturation — which is itself the testable next step.
+
+---
+
+# Independent cross-version reproduction
+
+The learned classifier was originally trained under scikit-learn 1.8.0 in the development sandbox, and the shipped `.joblib` raised `InconsistentVersionWarning` when loaded under 1.9.0 — scikit-learn's own warning states this "might lead to breaking code or **invalid results**." Every J/K figure in this document had been produced through that cross-version load.
+
+Rather than assume it was benign, the model was retrained from scratch on a different machine, a different scikit-learn (1.9.0), and a different Python (3.13 against 3.12).
+
+**Every number reproduced exactly.**
+
+| Held-out test | Sandbox (sk 1.8.0, py 3.12) | Independent (sk 1.9.0, py 3.13) |
+|---|---|---|
+| Precision | 0.9365 | 0.9365 |
+| Recall | 0.8551 | 0.8551 |
+| F1 | 0.8939 | 0.8939 |
+| FPR | 0.0500 | 0.0500 |
+
+All **11** ablation configurations that do not require the semantic cache matched to three decimal places — A 28.2%, J 78.8%, K 90.6%, and the rest.
+
+Two things follow. The version warning was real and worth acting on: scikit-learn does not distinguish "your pickle is fine" from "your pickle is silently wrong," so the only way to know was to check, and checking cost nothing but a rerun. And the seeded, split-recorded training pipeline is genuinely portable — this is the project's first result confirmed on hardware and a software stack the author never touched, which is a stronger form of reproducibility than a rerun in the same environment.

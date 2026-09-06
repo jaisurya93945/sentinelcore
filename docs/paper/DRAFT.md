@@ -313,3 +313,5 @@ pytest tests/ -q                          # 197 tests
 ```
 
 Seed `20260903`; splits recorded in `dataset/processed/splits.json`.
+
+**Independent reproduction.** The classifier and all 11 non-semantic ablation configurations were retrained and re-run on separate hardware under scikit-learn 1.9.0 and Python 3.13 (against 1.8.0 / 3.12 originally). Every figure reproduced exactly: precision 0.9365, recall 0.8551, F1 0.8939, FPR 0.0500, and each configuration's APR to three decimal places. This was prompted by a scikit-learn `InconsistentVersionWarning` on the shipped model artifact, which warns that a cross-version load "might lead to invalid results" — a warning that cannot distinguish a harmless load from a silently wrong one, and so was checked rather than assumed.
