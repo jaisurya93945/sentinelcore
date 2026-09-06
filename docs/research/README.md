@@ -601,7 +601,11 @@ This distinction matters. "Accurate enough not to need provenance" would be a fa
 
 **A model's self-reported probability is a poor confidence signal for a graded policy layer.** Any architecture that layers provenance, authority, or risk weighting on top of an LLM detector — which describes most of the current literature — is depending on a confidence estimate that, measured here, has 8 levels and is uncorrelated with correctness.
 
-Better options exist and none were used here: token log-probabilities, ensembling across samples or prompts, or explicit post-hoc calibration against a labelled set. **That is the single highest-value follow-up experiment this project has identified**, because it tests whether the semantic detector's poor showing is a property of LLM detection or merely of asking the model to state a number.
+Better options exist and none were used in the verbalized run: token log-probabilities, ensembling across samples or prompts, or explicit post-hoc calibration against a labelled set.
+
+**This is now implemented and ready to run** — `scripts/logprob_experiment.py`, documented in `docs/RUN_LOGPROB_EXPERIMENT.md`. It reads `P(YES)` from the model's own token distribution rather than its narration of it, on the same texts, with the same model.
+
+Its falsification condition is recorded in advance: if logprob confidence is also quantised and also avoids the ambiguous band, Finding 8 generalises to LLM detection. **If it is continuous and better calibrated, Finding 8 is a finding about a common implementation choice rather than about language models, and this document must narrow the claim.** The second outcome would be a correction to our own framing, which is exactly why it is named before the data exists.
 
 ## Caveats
 

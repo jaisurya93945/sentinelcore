@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     approval_ttl_seconds: int = 3600  # unanswered approvals EXPIRE, and expiry is a refusal
     semantic_detector_enabled: bool = False  # optional LLM detector; SENDS TEXT TO A THIRD PARTY
     semantic_model: str = "gpt-4o-mini"
+    # "verbalized" (model states a number) or "logprobs" (read P(yes) from
+    # the token distribution). See Finding 8 in docs/research/README.md.
+    semantic_confidence_mode: str = "verbalized"
     ml_detector_enabled: bool = False  # optional learned detector; see app/detectors/ml_classifier/
     api_keys: str = ""  # "key1:role1,key2:role2,..." -- empty means auth disabled
 
