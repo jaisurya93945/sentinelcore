@@ -490,7 +490,7 @@ A logistic regression over character and word n-grams, trained in seconds and co
 
 1. **The comparison is not fully fair, and the unfairness favours the classifier.** The learned model was *trained on the deepset training split*; the semantic detector is *zero-shot*. The classifier has an in-distribution advantage on exactly this corpus, which is the single biggest confound. Cross-source transfer testing showed the classifier generalises to pr1m8 (93.9% recall), so it is not pure memorisation — but a like-for-like comparison would give the LLM in-domain examples too.
 2. **The prompt is deliberately minimal.** No chain-of-thought, no few-shot examples, no multi-sample voting. This was a stated design choice: the comparison of interest is detector *class*, and a tuned prompt would improve the numbers while weakening the experiment. A better prompt would very likely raise recall.
-3. **The operating point was never tuned.** The learned classifier's threshold came from a 10-seed validation study; the semantic detector was run at 0.5 with no tuning at all. Its high precision (97.44%) and low FPR (1.25%) suggest it is sitting conservatively, and a lower threshold would trade precision for recall.
+3. **The operating point was never tuned.** The learned classifier's threshold came from a 10-seed validation study; the semantic detector was run at 0.5 with no tuning at all. *(Superseded by Finding 8: threshold tuning would have changed almost nothing here, because the model emits only 8 distinct probability values and just one prediction in 149 fell between 0.5 and 0.8. The original wording — that its high precision suggested it was 'sitting conservatively' — was wrong, and is corrected there.)*
 4. **gpt-4o-mini is a small model.** A larger one may behave differently. This is a single model at a single price point, not a claim about LLM detection in general.
 
 ## What it does support
@@ -559,3 +559,50 @@ Category breakdown shows one clear advantage:
 | structural_action | 81% | 81% | 94% | **100%** | **100%** |
 
 Structural attacks are privileged actions with clean-looking arguments. Deterministic tool-name authorization catches those on the deny list; the ones it misses are permitted tools carrying dangerous arguments (`email.send` with an AWS key in the body, `web.search` with a private key as the query). **Semantic understanding of the arguments closes exactly that gap**, and does so where lexical methods and name-based policy both fall short. This is a genuine argument for layering semantic detection *specifically* on tool arguments rather than on all traffic — the highest-value, lowest-volume application, which also limits the data-egress exposure the detector otherwise creates.
+
+---
+
+# Finding 8 — the mechanism is confirmed, but the reason is not the one we proposed
+
+`scripts/confidence_distribution.py` returned **CONSISTENT**: the semantic detector's ambiguous share is 2.6% against the learned classifier's 20.6%, and its provenance gain is correspondingly ~10× smaller (+1.2pp vs +11.8pp). The prediction held.
+
+The raw probabilities show *why*, and it is not what we assumed.
+
+## The LLM does not emit a probability. It emits a confidence token.
+
+Across 149 predictions, gpt-4o-mini produced **8 distinct values**: 0.0, 0.01, 0.1, 0.7, 0.8, 0.85, 0.9, 0.95 — and 138 of 149 fell on just four of them (0.0, 0.1, 0.85, 0.9).
+
+**Exactly one prediction out of 149 landed in the 0.50–0.80 band.**
+
+| On identical texts | Semantic (gpt-4o-mini) | Learned (TF-IDF) |
+|---|---|---|
+| Distinct values emitted | **8** | **143** |
+| Predictions in 0.50–0.80 | **1** | 13 |
+| Errors (FN + FP) | 31 + 1 = 32 | 10 + 4 = 14 |
+| **Errors that were *confident*** | **32 (100%)** | **1 (7%)** |
+
+All 31 false negatives were assigned p ≤ 0.1; **14 received p = 0.0 exactly**. The single false positive received p = 0.9. **Every error the model made, it made with high confidence.**
+
+The learned classifier, by contrast, behaves like a calibrated model: 143 distinct values, and its errors cluster near the decision boundary rather than at the extremes. That is what calibration means in practice.
+
+## This corrects our own Finding 6
+
+Finding 6 stated that the semantic detector's 97.44% precision "suggests it is sitting conservatively." **That was wrong.** Conservative implies calibrated caution — expressing doubt when doubt is warranted. This model does the opposite: it reports certainty uniformly, including on all 32 of its mistakes. Its high precision comes from a hard, confidently-drawn decision boundary that happens to be in a reasonable place, not from restraint.
+
+## The revised mechanism
+
+§5.4 claimed provenance acts only on ambiguous findings. That survives, but the semantic result sharpens it:
+
+> The semantic detector gains almost nothing from provenance **not because it is accurate enough to need none, but because its self-reported probability is quantised into a near-binary signal that never populates the band provenance operates on.** It cannot express the uncertainty the policy layer is built to act on.
+
+This distinction matters. "Accurate enough not to need provenance" would be a fact about the *task*. "Structurally unable to express uncertainty" is a fact about the *interface*, and it is fixable.
+
+## Practical consequence
+
+**A model's self-reported probability is a poor confidence signal for a graded policy layer.** Any architecture that layers provenance, authority, or risk weighting on top of an LLM detector — which describes most of the current literature — is depending on a confidence estimate that, measured here, has 8 levels and is uncorrelated with correctness.
+
+Better options exist and none were used here: token log-probabilities, ensembling across samples or prompts, or explicit post-hoc calibration against a labelled set. **That is the single highest-value follow-up experiment this project has identified**, because it tests whether the semantic detector's poor showing is a property of LLM detection or merely of asking the model to state a number.
+
+## Caveats
+
+One model (gpt-4o-mini), one prompt, temperature 0, probability requested as a JSON float. Quantisation of self-reported confidence onto round numbers is a known LLM behaviour, so this is a reproduction of a documented effect in a new setting rather than a novel discovery about language models. What is new is the consequence: **it disables the policy layer built on top of it**, and that consequence is measurable — +1.2pp against +11.8pp on the same benchmark, with the same policy engine, differing only in which detector supplies the findings.

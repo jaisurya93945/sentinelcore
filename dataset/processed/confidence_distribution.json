@@ -1,0 +1,21 @@
+{
+  "n": 149,
+  "semantic": {
+    "n_scored": 149,
+    "n_reported": 39,
+    "n_ambiguous_medium": 1,
+    "n_confident_high": 38,
+    "ambiguous_share_of_findings": 0.0256
+  },
+  "learned": {
+    "n_scored": 149,
+    "n_reported": 63,
+    "n_ambiguous_medium": 13,
+    "n_confident_high": 50,
+    "ambiguous_share_of_findings": 0.2063
+  },
+  "observed_provenance_gain_pp": {
+    "semantic_L_to_M": 1.2,
+    "learned_J_to_K": 11.8
+  }
+}

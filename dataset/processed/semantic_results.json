@@ -1,0 +1,767 @@
+{
+  "model": "gpt-4o-mini",
+  "partial": false,
+  "outstanding": 0,
+  "new_api_calls_this_run": 146,
+  "detection": {
+    "n": 149,
+    "precision": 0.9744,
+    "recall": 0.5507,
+    "f1": 0.7037,
+    "fpr": 0.0125,
+    "confusion": {
+      "tp": 38,
+      "fp": 1,
+      "tn": 79,
+      "fn": 31
+    }
+  },
+  "probabilities": [
+    {
+      "id": "deepset-train-0108",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0089",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0224",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0420",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0111",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0481",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0517",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0078",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0499",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0377",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0484",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0169",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "pr1m8-JB-007",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0231",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0084",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0011",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0371",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0345",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0182",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0025",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0474",
+      "p": 0.1,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0102",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0124",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0079",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0064",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0022",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0053",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-RP-005",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0058",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0323",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0150",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0095",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0045",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0473",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0510",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0480",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0496",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0463",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0171",
+      "p": 0.01,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0525",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0395",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0020",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0063",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0181",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0372",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0416",
+      "p": 0.7,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0108",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0298",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0061",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0425",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0284",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0337",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0239",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0229",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0251",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "pr1m8-IO-008",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0227",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0098",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0146",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0145",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0281",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0258",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0394",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0299",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0110",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-IO-023",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0426",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0541",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-ML-004",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0335",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0007",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0509",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0156",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0213",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "pr1m8-RP-006",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0026",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "pr1m8-FT-005",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0470",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0077",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0308",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0002",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0162",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0449",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0201",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0491",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0540",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0218",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0028",
+      "p": 0.01,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0379",
+      "p": 0.01,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0190",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0094",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0061",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0293",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0535",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0016",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0497",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-IO-009",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0016",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0017",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0300",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0000",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0439",
+      "p": 0.1,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0189",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0471",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0386",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0039",
+      "p": 0.01,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0262",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0191",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "pr1m8-RP-004",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0444",
+      "p": 0.1,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0522",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-IO-012",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-FT-006",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0109",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0344",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0265",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0363",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-IO-001",
+      "p": 0.95,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0096",
+      "p": 0.01,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0366",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0334",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "pr1m8-IO-019",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0168",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0238",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0104",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0105",
+      "p": 0.1,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0080",
+      "p": 0.95,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0493",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0062",
+      "p": 0.01,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0325",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0259",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "pr1m8-RP-008",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0099",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0019",
+      "p": 0.9,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0043",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0312",
+      "p": 0.01,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0290",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0521",
+      "p": 0.8,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0498",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0076",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-test-0044",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0137",
+      "p": 0.0,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0384",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0399",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0271",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0006",
+      "p": 0.0,
+      "label": 0
+    },
+    {
+      "id": "deepset-train-0467",
+      "p": 0.85,
+      "label": 1
+    },
+    {
+      "id": "deepset-test-0114",
+      "p": 0.9,
+      "label": 1
+    },
+    {
+      "id": "deepset-train-0357",
+      "p": 0.0,
+      "label": 0
+    }
+  ],
+  "estimated_cost_usd": 0.0081
+}
