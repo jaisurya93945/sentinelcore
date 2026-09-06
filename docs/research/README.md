@@ -695,3 +695,43 @@ Rather than assume it was benign, the model was retrained from scratch on a diff
 All **11** ablation configurations that do not require the semantic cache matched to three decimal places — A 28.2%, J 78.8%, K 90.6%, and the rest.
 
 Two things follow. The version warning was real and worth acting on: scikit-learn does not distinguish "your pickle is fine" from "your pickle is silently wrong," so the only way to know was to check, and checking cost nothing but a rerun. And the seeded, split-recorded training pipeline is genuinely portable — this is the project's first result confirmed on hardware and a software stack the author never touched, which is a stronger form of reproducibility than a rerun in the same environment.
+
+---
+
+# Finding 10 — our benchmark structurally cannot measure over-defense
+
+Every false-positive rate reported in this document — the rules baseline's 0.5%, the learned classifier's 1.1% at threshold 0.80 — is measured on a benign set whose text does not resemble an attack.
+
+Of **399 benign examples in the corpus, 5 contain attack-adjacent vocabulary.** That is **1.3%**.
+
+| Benign subset | n | rules FPR | learned@0.5 | learned@0.8 |
+|---|---|---|---|---|
+| Easy negatives (no trigger words) | 394 | 0.5% | 3.0% | 0.5% |
+| **Hard negatives (trigger words)** | **5** | 0.0% | **20.0%** | 0.0% |
+
+The easy negatives are 98.7% of the set, so they dominate every aggregate FPR we have published. **Our precision numbers are easy-negative precision numbers**, and they say little about the failure operators actually complain about: a security tool that blocks *"what is prompt injection?"*.
+
+The directional signal on the hard subset is suggestive — the learned classifier's FPR goes 3.0% → 20.0% — but **n=5 is far too small to conclude anything**, and it is reported here only as the reason the real evaluation is needed.
+
+## This is a known and serious failure mode
+
+The published NotInject benchmark (InjecGuard, arXiv:2410.22770) measures exactly this, and the results for widely-deployed detectors are severe:
+
+| System | Over-defense accuracy on NotInject |
+|---|---|
+| PromptGuard | **0.88%** |
+| Deepset | 5.31% |
+| ProtectAI v2 | 56.64% |
+| InjecGuard | 87.32% |
+
+PromptGuard flags essentially **all** benign text containing trigger words. A detector can look excellent on a standard benchmark and be unusable in production for precisely this reason — which is why a benchmark without hard negatives is not measuring the thing that matters.
+
+## What was built
+
+`scripts/evaluate_overdefense.py` runs against the real NotInject benchmark (`--dataset notinject`), any local JSONL of benign trigger-laden text (`--file`), or the 5 internal examples as a pipeline smoke test (`--dataset internal`, which prints an explicit warning that n=5 cannot support a conclusion).
+
+## Why this matters strategically
+
+This is the axis where the strongest published detectors do worst, and where the security/utility frontier this project has been measuring all along is the natural framing rather than a retrofitted one. Configurations L and M already hold **97.7% benign completion** on the agent benchmark. If that holds on NotInject, it is a defensible competitive claim — and unlike detection accuracy, it is a claim the incumbents have publicly failed.
+
+It is also, until run, **an untested hypothesis**, and is labelled as such everywhere it appears.

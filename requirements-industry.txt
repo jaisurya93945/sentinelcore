@@ -4,3 +4,4 @@
 -r requirements.txt
 transformers>=4.44.0
 torch>=2.2.0
+datasets>=2.19.0   # for --dataset notinject in scripts/evaluate_overdefense.py

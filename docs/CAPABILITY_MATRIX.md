@@ -62,6 +62,7 @@ Conflicting-instruction detection · source trust/provenance tracking · sanitiz
 - **Authentication is real but off by default.** No keys configured means every endpoint is open -- documented, not hidden, but still a real risk if deployed network-reachable without configuring `SENTINELCORE_API_KEYS`.
 - **Rate limiting exists but is off by default and per-process.** `app/core/limits.py` implements a fixed-window limiter and payload cap; enabling is the operator's choice. State is per worker process, so multi-worker deployments must divide the configured limit. Not a substitute for a real edge limiter.
 - Detector coverage is **English-pattern regex only** -- confirmed by evaluation (near-zero recall on German/Spanish/Chinese examples).
+- **Reported FPRs are easy-negative FPRs.** 1.3% of the benign corpus contains attack vocabulary, so over-defense is unmeasured. `scripts/evaluate_overdefense.py` built, NotInject run pending.
 - **No semantic/ML detection anywhere** -- deterministic rules/regex by design, with the honest recall ceiling that implies (17.68% on the real benchmark).
 - **No key rotation, revocation, or per-key rate limiting.**
 

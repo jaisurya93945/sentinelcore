@@ -287,7 +287,9 @@ This generalises beyond our system: any evaluation where a component can be enab
 4. **The classifier is lexical, not semantic.** It will not generalize to novel semantic attacks or to languages outside its training data.
 5. **Single trust-multiplier configuration.** Constants are a stated modeling choice, not calibrated.
 6. **No comparison against published defenses.** We compare our own configurations, not against Progent, CaMeL, or similar.
-7. **Wire-boundary ceiling unquantified.** We argue framework-integrated defenses see strictly more; we have not measured how much more.
+7. **Our benign set contains almost no hard negatives.** Of 399 benign examples, 5 contain attack-adjacent vocabulary (1.3%). Every false-positive rate reported here is therefore an *easy-negative* rate and does not measure over-defense — the failure mode where a detector blocks legitimate text that merely discusses attacks. The published NotInject benchmark reports over-defense accuracy as low as 0.88% for PromptGuard, so this is a severe and well-documented failure mode that our evaluation is structurally blind to. `scripts/evaluate_overdefense.py` addresses it; results are not yet in.
+
+8. **Wire-boundary ceiling unquantified.** We argue framework-integrated defenses see strictly more; we have not measured how much more.
 
 ---
 

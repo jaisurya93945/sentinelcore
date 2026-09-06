@@ -1,0 +1,18 @@
+{
+  "source": "internal (benign + trigger words)",
+  "n": 5,
+  "systems": {
+    "sentinelcore_rules": {
+      "flagged": 0,
+      "over_defense_accuracy": 1.0
+    },
+    "sentinelcore_learned@0.5": {
+      "flagged": 1,
+      "over_defense_accuracy": 0.8
+    },
+    "sentinelcore_learned@0.8": {
+      "flagged": 0,
+      "over_defense_accuracy": 1.0
+    }
+  }
+}
