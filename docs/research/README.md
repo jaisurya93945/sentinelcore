@@ -476,6 +476,8 @@ The headline comparison for the paper stands and is arguably sharper: an oracle 
 
 # Finding 6 — a TF-IDF classifier outperformed gpt-4o-mini on this task
 
+> **This is a REPLICATION, not a discovery.** Published work already establishes that lightweight n-gram classifiers outperform heavyweight detectors on this task: the Mirror pattern reports a character n-gram linear SVM at F1 0.9207 against Meta Prompt-Guard-2's 0.5914, and NVIDIA report a Random Forest at F1 0.9601 against PromptGuard's 0.3029. Our classifier is the same architectural family and lands in the same region. Independent replication on a different corpus has value — the field has a replication deficit — but claiming novelty here would be wrong. See `docs/related/PRIOR_WORK.md`.
+
 Run on the same held-out split (n=149) that every other detector is measured on:
 
 | Detector | Precision | Recall | F1 | FPR |

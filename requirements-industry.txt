@@ -1,0 +1,6 @@
+# Optional: head-to-head against Meta Llama Prompt Guard 2.
+# Runs locally on CPU. No API key, no rate limit, no per-request cost.
+# First run downloads ~370MB from huggingface.co.
+-r requirements.txt
+transformers>=4.44.0
+torch>=2.2.0
