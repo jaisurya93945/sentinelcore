@@ -191,6 +191,25 @@ Three further caveats: the prompt is deliberately minimal (no chain-of-thought, 
 
 The claim that survives all of these is narrow but useful: **for deterministic, high-volume, cost- and latency-sensitive classification, an LLM is not automatically the stronger choice, and a cheap local model is a serious baseline rather than a strawman.** For a gateway this matters twice over, since every request pays the detector's cost and a third-party call is additionally a data-egress event.
 
+#### 5.1.4 LLM confidence has no usable middle
+
+Layered defences weight, escalate, or gate on a detector's confidence. Measured on the same held-out texts, gpt-4o-mini's confidence is unusable for that purpose — in **two independent formulations**:
+
+| | Self-reported probability | Token log-probabilities |
+|---|---|---|
+| Distinct values | 8 / 149 | 8 / 51 |
+| Predictions in 0.50–0.80 | **1** | **1** |
+| Errors made confidently | **100%** | **100%** |
+| Mass at absolute extremes | — | **92%** |
+
+For comparison, the learned classifier on identical texts produced **143 distinct values** with **7%** of its errors confident — its mistakes cluster near the decision boundary, which is what calibration looks like.
+
+Reading the token distribution directly did not recover the missing signal; it saturated harder, 92% of predictions landing on exactly 0.0 or 1.0. **The uncertainty is not hidden behind a poor output format — at temperature 0 it is not present in the forward pass.** It cannot be extracted, only manufactured: by ensembling, post-hoc calibration, or an auxiliary error model, each of which multiplies the cost of a detector that already carries a network round trip and a data-egress event.
+
+This is the mechanism behind §5.3's provenance result. The policy layer is not underperforming on the semantic detector; it is being starved. Same benchmark, same policy engine, differing only in which detector supplies findings: **+1.2 points against +11.8.**
+
+*(n=51 of 149 for the log-probability arm; every metric is identical between modes at this n, but the claim should be restated at full n.)*
+
 ### 5.2 Statistical validation
 
 10 independent stratified splits, McNemar's exact test for the paired classifier comparison, and 10,000-sample bootstrap CIs for the agent-benchmark rates. Reproduce with `scripts/statistical_validation.py`.

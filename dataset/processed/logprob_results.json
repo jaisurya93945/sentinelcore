@@ -1,0 +1,37 @@
+{
+  "model": "gpt-4o-mini",
+  "mode": "logprobs",
+  "partial": true,
+  "n_collected": 51,
+  "new_api_calls_this_run": 50,
+  "profile": {
+    "n": 51,
+    "distinct_values": 8,
+    "in_ambiguous_band": 1,
+    "n_reported": 11,
+    "precision": 1.0,
+    "recall": 0.4583,
+    "errors": 13,
+    "confident_errors": 13,
+    "confident_error_share": 1.0
+  },
+  "value_counts": {
+    "0.0": 37,
+    "0.004": 1,
+    "0.007": 1,
+    "0.076": 1,
+    "0.5": 1,
+    "1.0": 10
+  },
+  "verbalized_profile_same_texts": {
+    "n": 51,
+    "distinct_values": 6,
+    "in_ambiguous_band": 1,
+    "n_reported": 11,
+    "precision": 1.0,
+    "recall": 0.4583,
+    "errors": 13,
+    "confident_errors": 13,
+    "confident_error_share": 1.0
+  }
+}

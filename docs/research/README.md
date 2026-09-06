@@ -610,3 +610,65 @@ Its falsification condition is recorded in advance: if logprob confidence is als
 ## Caveats
 
 One model (gpt-4o-mini), one prompt, temperature 0, probability requested as a JSON float. Quantisation of self-reported confidence onto round numbers is a known LLM behaviour, so this is a reproduction of a documented effect in a new setting rather than a novel discovery about language models. What is new is the consequence: **it disables the policy layer built on top of it**, and that consequence is measurable — +1.2pp against +11.8pp on the same benchmark, with the same policy engine, differing only in which detector supplies the findings.
+
+---
+
+# Finding 9 — log-probabilities do not fix it. The uncertainty is not there to extract.
+
+`scripts/logprob_experiment.py`, n=51 of 149 (partial; 98 outstanding). The falsification condition fixed in advance was: *if logprob confidence is also quantised and also avoids the ambiguous band, Finding 8 generalises to LLM detection; if it is continuous, Finding 8 is about an implementation choice and must be narrowed.*
+
+**It is also quantised, and worse.**
+
+| Same 51 texts | Logprobs | Verbalized |
+|---|---|---|
+| Distinct values | 8 | 6 |
+| **In the 0.50–0.80 band** | **1** | **1** |
+| Findings reported | 11 | 11 |
+| Errors | 13 | 13 |
+| **Confident errors** | **13 (100%)** | **13 (100%)** |
+| Precision | 100.0% | 100.0% |
+| Recall | 45.8% | 45.8% |
+
+Reading the token distribution directly did not recover the missing uncertainty. It **saturated harder**:
+
+```
+p=0.0     37   ####################################
+p=0.004    1
+p=0.007    1
+p=0.076    1
+p=0.5      1
+p=1.0     10   ##########
+```
+
+**92% of predictions (47/51) sit at the absolute extremes, 0.0 or 1.0.** The verbalized mode at least used intermediate round numbers (0.1, 0.85, 0.9). Logprobs collapses to near-binary.
+
+## The two modes made identical decisions
+
+Same precision, same recall, same 11 findings, same 13 errors. Only the *expression* of confidence differed — and both expressions are unusable by a graded policy layer. (This is not a caching artifact: the modes use separate cache namespaces and produced visibly different values, 0.004/0.007/0.076/1.0 against 0.0/0.1/0.85/0.9.)
+
+## The sharpened claim
+
+Finding 8 said the model emits a confidence *token* rather than a probability, and proposed that a better interface might recover the signal. **It does not.**
+
+> At temperature 0, single-token classification produces a near-deterministic token distribution. The uncertainty is not hidden behind a bad output format — **it is not present in the model's forward pass to begin with.** Changing how you read it changes nothing.
+
+This makes the finding stronger and narrower at once. It is no longer a claim about how people *ask* for confidence; it is a claim about what a temperature-0 classification call *contains*.
+
+## What this means for layered defences
+
+Any architecture that weights, escalates, or gates on an LLM detector's confidence — much of the current provenance and authority literature — is building on a signal that, measured two independent ways here, has no usable middle.
+
+The uncertainty cannot be extracted. **It has to be manufactured externally:**
+- ensembling across paraphrases, prompts, or samples at temperature > 0,
+- post-hoc calibration against a labelled set,
+- or an auxiliary model trained to predict the detector's error.
+
+None of these are free, and all of them multiply the per-request cost of a detector that already costs a network round trip and a data-egress event. That is a real architectural argument for keeping a calibrated local model in the pipeline — ours emitted 143 distinct values on the same texts, with 7% confident errors against the LLM's 100%.
+
+## Caveats
+
+**n=51 of 149, partial.** Every metric is identical between modes at this n and the distribution is unambiguous, so completing the split is confirmatory rather than decisive — but the claim should be restated at full n before publication.
+
+**Top-20 truncation.** When `YES` does not appear among the top 20 alternatives the implementation computes `1 − P(NO)`, which floors to 0.0 for sufficiently small values. Some of the 37 zeros are therefore "very small" rather than exactly zero. This does not affect the conclusion — all of them sit far below the 0.50 reporting floor — but the distribution is marginally less degenerate than the histogram suggests.
+
+**One model, one task, temperature 0.** A larger model, a multi-token rationale, or sampling at temperature > 0 could all behave differently. Temperature 0 was chosen for reproducibility, and it is plausibly the direct cause of the saturation — which is itself the testable next step.
