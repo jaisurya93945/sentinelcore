@@ -508,3 +508,54 @@ Cause: `_scan()` in `run_ablation.py` iterated *all registered detectors*. Setti
 **The environment variable controls the shipped gateway; the ablation must control its own conditions explicitly.** Optional detectors (`ml_classifier`, `semantic`) are now excluded from the base scan and appear only via explicit config flags. Configs `L_semantic_flat` and `M_semantic_prov` were added as proper conditions.
 
 The give-away was that the baseline moved. **In a correct ablation the baseline is fixed by definition** — if config A changes when you enable something A is not supposed to include, the isolation is broken. That is a useful general check, and it is worth stating because the contaminated table looked entirely plausible.
+
+---
+
+# Finding 7 — the pre-registered prediction held
+
+Before running the semantic detector, `docs/RUN_SEMANTIC_EXPERIMENT.md` and the runner's docstring recorded this falsification condition:
+
+> *A stronger semantic detector should **not** automatically make provenance more valuable — it should move where the useful operating point sits. If instead the provenance gain simply grows with detector quality, §5.4 is **wrong** and must be rewritten.*
+
+Recorded in advance precisely so the outcome could not be reframed afterwards. The clean, isolated ablation (85 attack / 85 benign):
+
+| Detector | Flat APR | +Provenance APR | **Gain** | BCR cost |
+|---|---|---|---|---|
+| Rules | 28.2% | 30.6% | **+2.4** | 0.0 |
+| **Semantic (gpt-4o-mini)** | **70.6%** | **71.8%** | **+1.2** | **0.0** |
+| Learned (TF-IDF) | 78.8% | 90.6% | **+11.8** | −7.1 |
+| Oracle (MED) | 36.5% | 83.5% | **+47.0** | 0.0 |
+
+Ordered by **detector strength**: rules 28.2 < oracle(MED) 36.5 < semantic 70.6 < learned 78.8
+Ordered by **provenance gain**: semantic +1.2 < rules +2.4 < learned +11.8 < oracle(MED) +47.0
+
+**The two orderings do not match.** The semantic detector is 2.5× stronger than the rules baseline yet receives a *smaller* provenance gain, and the oracle — weaker than semantic in flat APR — receives the largest gain of all. **Provenance value is not a function of detector strength.** §5.4 stands, tested against a third detector class, on a prediction fixed before the data existed.
+
+## The proposed mechanism, and how to check it
+
+The explanation is that provenance acts only on findings in the **ambiguous** band. A finding confident enough to block on its own leaves provenance nothing to add; a detector producing no finding leaves it nothing to weight. The semantic detector's profile — 97.44% precision at 55.07% recall — is that of a *conservative, confident* classifier: it says yes rarely, and when it does, emphatically.
+
+That is a checkable prediction, not a story: **the semantic detector should produce a smaller share of ambiguous findings than the learned classifier.** `python scripts/confidence_distribution.py` tests it directly from existing result files, with no API calls. It prints CONSISTENT or INCONSISTENT and states plainly that an inconsistent result means §5.4's mechanism must be revised.
+
+## A second, practical result: a different point on the frontier
+
+The semantic and learned detectors are not ranked — they occupy different positions:
+
+| Config | APR | BCR |
+|---|---|---|
+| L semantic | 70.6% | **97.7%** |
+| M semantic + prov | 71.8% | **97.7%** |
+| J learned | 78.8% | 91.8% |
+| K learned + prov | **90.6%** | 84.7% |
+
+The learned classifier with provenance prevents the most attacks; the semantic detector preserves the most benign workflows, costing only 2.3 points of utility against the learned pair's 8.2–15.3. **An operator choosing between them is choosing an operating point, not a better detector**, and the right choice depends on whether a blocked legitimate workflow or a missed attack is more costly in their deployment.
+
+## Where semantic detection wins outright
+
+Category breakdown shows one clear advantage:
+
+| Category | C (tool authz) | J (learned) | K | **L (semantic)** | **M** |
+|---|---|---|---|---|---|
+| structural_action | 81% | 81% | 94% | **100%** | **100%** |
+
+Structural attacks are privileged actions with clean-looking arguments. Deterministic tool-name authorization catches those on the deny list; the ones it misses are permitted tools carrying dangerous arguments (`email.send` with an AWS key in the body, `web.search` with a private key as the query). **Semantic understanding of the arguments closes exactly that gap**, and does so where lexical methods and name-based policy both fall short. This is a genuine argument for layering semantic detection *specifically* on tool arguments rather than on all traffic — the highest-value, lowest-volume application, which also limits the data-egress exposure the detector otherwise creates.
