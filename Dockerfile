@@ -19,7 +19,7 @@ RUN useradd --create-home --shell /bin/bash sentinelcore && \
 
 WORKDIR /app
 COPY --from=builder /root/.local /home/sentinelcore/.local
-COPY app/ ./app/
+COPY sentinelcore/ ./sentinelcore/
 RUN chown -R sentinelcore:sentinelcore /app
 
 USER sentinelcore
@@ -32,4 +32,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')" || exit 1
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "sentinelcore.main:app", "--host", "0.0.0.0", "--port", "8000"]

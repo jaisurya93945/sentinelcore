@@ -42,7 +42,7 @@ from sklearn.metrics import precision_recall_curve, roc_curve
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from app.detectors.registry import get_registered_detectors  # noqa: E402
+from sentinelcore.detectors.registry import get_registered_detectors  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
 EVAL = ROOT / "dataset" / "processed" / "eval_set.jsonl"

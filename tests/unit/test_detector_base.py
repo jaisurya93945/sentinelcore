@@ -1,10 +1,10 @@
-"""Unit tests for the detector plugin interface (app/detectors/base.py, registry.py)."""
+"""Unit tests for the detector plugin interface (sentinelcore/detectors/base.py, registry.py)."""
 
 import pytest
 
-from app.detectors.base import BaseDetector
-from app.detectors.registry import get_registered_detectors, register_detector
-from app.models.finding import Finding, Severity
+from sentinelcore.detectors.base import BaseDetector
+from sentinelcore.detectors.registry import get_registered_detectors, register_detector
+from sentinelcore.models.finding import Finding, Severity
 
 
 def test_cannot_instantiate_base_detector_directly():

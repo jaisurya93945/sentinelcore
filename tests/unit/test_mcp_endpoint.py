@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from sentinelcore.main import app
 
 client = TestClient(app)
 
@@ -104,7 +104,7 @@ def test_multiple_tools_scored_independently():
 
 
 def test_mcp_scan_writes_audit_event_per_tool():
-    from app.services.audit_log import get_recent_events
+    from sentinelcore.services.audit_log import get_recent_events
 
     client.post(
         "/api/v1/scan/mcp-tools",

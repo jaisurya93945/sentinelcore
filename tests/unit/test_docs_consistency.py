@@ -66,7 +66,7 @@ def test_paper_does_not_contain_retracted_claims():
 
 def test_shipped_thresholds_match_documented_values():
     """The ablation previously duplicated these and silently drifted."""
-    from app.detectors.ml_classifier.detector import HIGH_CONFIDENCE, REPORTING_FLOOR
+    from sentinelcore.detectors.ml_classifier.detector import HIGH_CONFIDENCE, REPORTING_FLOOR
 
     assert REPORTING_FLOOR == 0.50
     assert HIGH_CONFIDENCE == 0.80
@@ -76,7 +76,7 @@ def test_shipped_thresholds_match_documented_values():
 
 def test_ablation_imports_thresholds_rather_than_duplicating():
     src = (ROOT / "scripts" / "run_ablation.py").read_text()
-    assert "from app.detectors.ml_classifier.detector import" in src, (
+    assert "from sentinelcore.detectors.ml_classifier.detector import" in src, (
         "run_ablation.py must import shipped thresholds, not redefine them"
     )
     assert not re.search(r"p\s*<\s*0\.35", src), "hardcoded threshold reintroduced in run_ablation.py"

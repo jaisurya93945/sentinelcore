@@ -102,7 +102,7 @@ def main():
 
     # --- ours ---
     import joblib
-    from app.detectors.registry import get_registered_detectors
+    from sentinelcore.detectors.registry import get_registered_detectors
 
     model = joblib.load(ROOT / "dataset" / "processed" / "ml_detector.joblib")
     ours_p = list(model.predict_proba(texts)[:, 1])

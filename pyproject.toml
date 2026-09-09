@@ -1,25 +1,51 @@
 [project]
 name = "sentinelcore"
-version = "0.3.0"
-description = "SentinelCore -- AI Threat Gateway. Open-source security layer for LLM, RAG, and agentic AI systems."
+version = "0.4.0"
+description = "A security control plane for LLM and agent applications: detection, provenance, risk, authorization, policy and enforcement."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
+authors = [{ name = "CipherAI" }]
+keywords = ["llm-security", "prompt-injection", "ai-security", "agent-security", "guardrails", "mcp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
+
+# Deliberately minimal. A security library that drags in a web framework,
+# a model runtime and a numeric stack by default is one most people cannot
+# adopt. Everything beyond schema + policy parsing is an extra.
 dependencies = [
-    "fastapi>=0.110.0",
-    "uvicorn[standard]>=0.29.0",
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
     "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=8.0.0",
-    "pytest-cov>=4.1.0",
-    "httpx>=0.27.0",
-    "respx>=0.21.0",
-]
+server = ["fastapi>=0.110.0", "uvicorn[standard]>=0.29.0", "httpx>=0.27.0"]
+ml = ["scikit-learn>=1.4.0", "joblib>=1.3.0"]
+semantic = ["openai>=1.40.0"]
+dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "httpx>=0.27.0", "respx>=0.21.0",
+       "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0"]
+all = ["sentinelcore[server,ml,semantic]"]
+
+[project.scripts]
+sentinel = "sentinelcore.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/jaisurya93945/sentinelcore"
+Documentation = "https://github.com/jaisurya93945/sentinelcore/tree/main/docs"
+
+[tool.setuptools.packages.find]
+include = ["sentinelcore*"]
+
+[tool.setuptools.package-data]
+sentinelcore = ["services/*.yaml", "static/*.html", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -43,8 +43,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.core.config import settings  # noqa: E402
-from app.detectors.semantic.detector import RateLimited, _cache_key, _cached, classify  # noqa: E402
+from sentinelcore.core.config import settings  # noqa: E402
+from sentinelcore.detectors.semantic.detector import RateLimited, _cache_key, _cached, classify  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
 EVAL = ROOT / "dataset" / "processed" / "eval_set.jsonl"

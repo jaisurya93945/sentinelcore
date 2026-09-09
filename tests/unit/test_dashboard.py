@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from sentinelcore.main import app
 
 client = TestClient(app)
 
@@ -21,7 +21,7 @@ def test_dashboard_never_embeds_raw_scan_text():
 
 
 def test_tool_call_detail_reaches_audit_trail():
-    from app.services.audit_log import get_recent_events
+    from sentinelcore.services.audit_log import get_recent_events
 
     client.post(
         "/api/v1/scan/tool-call",
@@ -32,7 +32,7 @@ def test_tool_call_detail_reaches_audit_trail():
 
 
 def test_mcp_tool_detail_reaches_audit_trail():
-    from app.services.audit_log import get_recent_events
+    from sentinelcore.services.audit_log import get_recent_events
 
     client.post(
         "/api/v1/scan/mcp-tools",
@@ -43,7 +43,7 @@ def test_mcp_tool_detail_reaches_audit_trail():
 
 
 def test_plain_scan_has_no_detail():
-    from app.services.audit_log import get_recent_events
+    from sentinelcore.services.audit_log import get_recent_events
 
     client.post("/api/v1/scan", json={"text": "hello"})
     events = get_recent_events(limit=1)

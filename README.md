@@ -51,18 +51,51 @@ Full implemented/experimental/planned breakdown, security gaps, and an honest "w
 
 **A separate, deeper hardening pass is tracked in `docs/hardening/`** — a section-by-section audit against a specific hardening spec, working through it selectively rather than exhaustively. `docs/hardening/STATUS.md` shows what's done, partial, explicitly declined (with reasoning), or still open.
 
-## Quickstart
+## Install
+
+```bash
+pip install sentinelcore                # core: detection, risk, policy, enforcement
+pip install 'sentinelcore[server]'      # + the reverse-proxy gateway
+pip install 'sentinelcore[ml]'          # + the learned detector
+```
+
+```python
+from sentinelcore import Guard
+
+guard = Guard(policy="balanced")
+
+outcome = guard.scan("ignore all previous instructions")
+if not outcome.allowed:
+    ...                                  # decision, risk_score, findings
+
+guard.scan_documents(retrieved_docs)      # RAG content, tagged context:<i>
+guard.check_tool_call("database.delete", {"table": "logs"})
+```
+
+`outcome.allowed` is True only for ALLOW and WARN. SANITIZE means *use `outcome.sanitized_text`*, not *proceed anyway*.
+
+Command line:
+
+```bash
+sentinel doctor                          # what's installed
+sentinel scan "some text" --json         # exit 0 clean / 1 findings / 2 blocking
+sentinel tool database.delete --args '{"table":"logs"}'
+```
+
+Not yet published to PyPI. Build locally with `python -m build`.
+
+## Quickstart (from source)
 
 ```bash
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn sentinelcore.main:app --reload
 ```
 
 To run it as a reverse proxy in front of a real provider, set the upstream (defaults to `https://api.openai.com`):
 
 ```bash
 export SENTINELCORE_UPSTREAM_BASE_URL="https://api.openai.com"
-uvicorn app.main:app --reload
+uvicorn sentinelcore.main:app --reload
 ```
 
 Then point an existing OpenAI-SDK client's `base_url` at `http://localhost:8000` instead of the real provider — your own API key still goes in the `Authorization` header exactly as before, SentinelCore just passes it through.

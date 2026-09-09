@@ -1,7 +1,7 @@
 """Unit tests for the policy engine."""
 
-from app.models.finding import Decision, Finding, Severity
-from app.services.policy_engine import decide, load_policy
+from sentinelcore.models.finding import Decision, Finding, Severity
+from sentinelcore.services.policy_engine import decide, load_policy
 
 TEST_POLICY = {
     "rules": {

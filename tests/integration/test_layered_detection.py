@@ -6,8 +6,8 @@ catches what neither catches alone -- this is tested and enforced here, not
 just claimed in docs.
 """
 
-from app.detectors.obfuscation.detector import ObfuscationDetector
-from app.detectors.prompt_injection.detector import PromptInjectionDetector
+from sentinelcore.detectors.obfuscation.detector import ObfuscationDetector
+from sentinelcore.detectors.prompt_injection.detector import PromptInjectionDetector
 
 
 def test_zero_width_split_evades_prompt_injection_detector():

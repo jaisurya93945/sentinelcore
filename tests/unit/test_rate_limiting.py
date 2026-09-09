@@ -3,9 +3,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import settings
-from app.core.limits import FixedWindowLimiter, client_key, get_limiter
-from app.main import app
+from sentinelcore.core.config import settings
+from sentinelcore.core.limits import FixedWindowLimiter, client_key, get_limiter
+from sentinelcore.main import app
 
 client = TestClient(app)
 

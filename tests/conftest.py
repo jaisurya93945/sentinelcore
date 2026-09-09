@@ -2,9 +2,9 @@
 
 import pytest
 
-from app.core.config import settings
-from app.services.approvals import init_db as init_approvals
-from app.services.audit_log import init_db
+from sentinelcore.core.config import settings
+from sentinelcore.services.approvals import init_db as init_approvals
+from sentinelcore.services.audit_log import init_db
 
 
 @pytest.fixture(autouse=True)

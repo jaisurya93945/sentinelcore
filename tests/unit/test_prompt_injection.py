@@ -1,7 +1,7 @@
 """Unit tests for the prompt injection baseline detector."""
 
-from app.detectors.prompt_injection.detector import PromptInjectionDetector
-from app.detectors.registry import get_registered_detectors
+from sentinelcore.detectors.prompt_injection.detector import PromptInjectionDetector
+from sentinelcore.detectors.registry import get_registered_detectors
 
 
 def test_detector_is_registered():

@@ -1,7 +1,7 @@
 """Unit tests for the risk engine."""
 
-from app.models.finding import Finding, Severity
-from app.services.risk_engine import calculate_risk_score
+from sentinelcore.models.finding import Finding, Severity
+from sentinelcore.services.risk_engine import calculate_risk_score
 
 
 def _finding(severity: Severity) -> Finding:

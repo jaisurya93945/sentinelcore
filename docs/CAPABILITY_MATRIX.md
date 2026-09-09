@@ -38,7 +38,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |
 | Authentication + role-based authorization (viewer/operator/admin) | `tests/unit/test_auth.py`, `test_auth_integration.py` -- all 6 scenarios live-verified |
 
-**Verified right now:** 5 registered detectors, 8 API endpoints, 154 passing tests, `app/core/auth.py` at 100% coverage, 98% overall coverage. Full section-by-section hardening status: `docs/hardening/STATUS.md`.
+**Verified right now:** 5 registered detectors, 8 API endpoints, 154 passing tests, `sentinelcore/core/auth.py` at 100% coverage, 98% overall coverage. Full section-by-section hardening status: `docs/hardening/STATUS.md`.
 
 ## 2. Experimental / Partial — real, but with known, load-bearing caveats
 
@@ -60,7 +60,7 @@ Conflicting-instruction detection · source trust/provenance tracking · sanitiz
 ## 4. Security Gaps (stated plainly)
 
 - **Authentication is real but off by default.** No keys configured means every endpoint is open -- documented, not hidden, but still a real risk if deployed network-reachable without configuring `SENTINELCORE_API_KEYS`.
-- **Rate limiting exists but is off by default and per-process.** `app/core/limits.py` implements a fixed-window limiter and payload cap; enabling is the operator's choice. State is per worker process, so multi-worker deployments must divide the configured limit. Not a substitute for a real edge limiter.
+- **Rate limiting exists but is off by default and per-process.** `sentinelcore/core/limits.py` implements a fixed-window limiter and payload cap; enabling is the operator's choice. State is per worker process, so multi-worker deployments must divide the configured limit. Not a substitute for a real edge limiter.
 - Detector coverage is **English-pattern regex only** -- confirmed by evaluation (near-zero recall on German/Spanish/Chinese examples).
 - **Reported FPRs are easy-negative FPRs.** 1.3% of the benign corpus contains attack vocabulary, so over-defense is unmeasured. `scripts/evaluate_overdefense.py` built, NotInject run pending.
 - **No semantic/ML detection anywhere** -- deterministic rules/regex by design, with the honest recall ceiling that implies (17.68% on the real benchmark).

@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.detectors.registry import get_registered_detectors  # noqa: E402
+from sentinelcore.detectors.registry import get_registered_detectors  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
 OUT = ROOT / "dataset" / "processed" / "baseline_comparison.json"

@@ -1,7 +1,7 @@
 """Unit tests for the tool argument detector."""
 
-from app.detectors.registry import get_registered_detectors
-from app.detectors.tool_arguments.detector import ToolArgumentDetector
+from sentinelcore.detectors.registry import get_registered_detectors
+from sentinelcore.detectors.tool_arguments.detector import ToolArgumentDetector
 
 
 def test_detector_is_registered():

@@ -11,9 +11,9 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from app.core.config import settings
-from app.main import app
-from app.services import approvals
+from sentinelcore.core.config import settings
+from sentinelcore.main import app
+from sentinelcore.services import approvals
 
 client = TestClient(app)
 

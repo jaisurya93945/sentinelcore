@@ -7,10 +7,10 @@ origin was tracked and then ignored, making "provenance-aware" a false
 claim -- these tests exist to keep it true.
 """
 
-from app.models.finding import Decision, Finding, Severity
-from app.services.origin_trust import DEFAULT_MULTIPLIER, trust_multiplier
-from app.services.policy_engine import decide
-from app.services.risk_engine import calculate_risk_score
+from sentinelcore.models.finding import Decision, Finding, Severity
+from sentinelcore.services.origin_trust import DEFAULT_MULTIPLIER, trust_multiplier
+from sentinelcore.services.policy_engine import decide
+from sentinelcore.services.risk_engine import calculate_risk_score
 
 
 def _finding(origin: str, severity: Severity = Severity.MEDIUM) -> Finding:

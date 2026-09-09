@@ -1,8 +1,8 @@
-"""Unit tests for real sanitize enforcement (app/services/sanitizer.py)."""
+"""Unit tests for real sanitize enforcement (sentinelcore/services/sanitizer.py)."""
 
-from app.detectors.registry import get_registered_detectors
-from app.models.finding import Decision, EnforcementStatus
-from app.services.sanitizer import enforce_sanitize
+from sentinelcore.detectors.registry import get_registered_detectors
+from sentinelcore.models.finding import Decision, EnforcementStatus
+from sentinelcore.services.sanitizer import enforce_sanitize
 
 
 def _detect(text: str):
@@ -93,7 +93,7 @@ def test_control_characters_stripped():
 def test_finding_type_with_no_sanitizer_is_not_implemented():
     """encoded_payload_suspected has no registered sanitizer -- a base64
     blob can't be safely "cleaned" without knowing what it decodes to."""
-    from app.models.finding import Finding, Severity
+    from sentinelcore.models.finding import Finding, Severity
 
     findings = [
         Finding(detector="obfuscation", type="encoded_payload_suspected", description="test", severity=Severity.LOW)

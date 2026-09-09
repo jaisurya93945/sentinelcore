@@ -104,7 +104,7 @@ def main():
     if not texts:
         print("No texts loaded."); sys.exit(1)
 
-    from app.detectors.registry import get_registered_detectors
+    from sentinelcore.detectors.registry import get_registered_detectors
     import joblib
 
     rules = {k: v for k, v in get_registered_detectors().items() if k not in ("ml_classifier", "semantic")}

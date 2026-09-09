@@ -1,7 +1,7 @@
 """Unit tests for the PII detector."""
 
-from app.detectors.pii.detector import PIIDetector
-from app.detectors.registry import get_registered_detectors
+from sentinelcore.detectors.pii.detector import PIIDetector
+from sentinelcore.detectors.registry import get_registered_detectors
 
 
 def test_detector_is_registered():

@@ -10,9 +10,9 @@ import json
 
 import pytest
 
-from app.core.config import settings
-from app.detectors.registry import get_registered_detectors
-from app.detectors.semantic import detector as sem
+from sentinelcore.core.config import settings
+from sentinelcore.detectors.registry import get_registered_detectors
+from sentinelcore.detectors.semantic import detector as sem
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ def test_empty_input_returns_nothing(sem_on):
 def test_bands_match_the_learned_detector_for_comparability():
     """The two probabilistic detectors must share bands, or config L/M
     results are not comparable to J/K."""
-    from app.detectors.ml_classifier.detector import HIGH_CONFIDENCE as ML_HI
-    from app.detectors.ml_classifier.detector import REPORTING_FLOOR as ML_FLOOR
+    from sentinelcore.detectors.ml_classifier.detector import HIGH_CONFIDENCE as ML_HI
+    from sentinelcore.detectors.ml_classifier.detector import REPORTING_FLOOR as ML_FLOOR
 
     assert (sem.REPORTING_FLOOR, sem.HIGH_CONFIDENCE) == (ML_FLOOR, ML_HI)

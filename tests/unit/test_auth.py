@@ -3,8 +3,8 @@
 import pytest
 from fastapi import HTTPException
 
-from app.core.auth import Role, parse_api_keys, require_role
-from app.core.config import settings
+from sentinelcore.core.auth import Role, parse_api_keys, require_role
+from sentinelcore.core.config import settings
 
 
 def test_no_keys_configured_means_auth_disabled(monkeypatch):

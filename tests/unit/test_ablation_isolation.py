@@ -21,7 +21,7 @@ import importlib
 
 import pytest
 
-from app.core.config import settings
+from sentinelcore.core.config import settings
 
 ablation = importlib.import_module("scripts.run_ablation")
 

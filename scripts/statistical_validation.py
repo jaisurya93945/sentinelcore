@@ -41,7 +41,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import FeatureUnion, Pipeline
 
-from app.detectors.registry import get_registered_detectors  # noqa: E402
+from sentinelcore.detectors.registry import get_registered_detectors  # noqa: E402
 
 ROOT = Path(__file__).parent.parent
 OUT = ROOT / "dataset" / "processed" / "statistical_validation.json"

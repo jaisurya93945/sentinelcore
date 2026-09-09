@@ -1,7 +1,7 @@
 """Unit tests for the obfuscation baseline detector."""
 
-from app.detectors.obfuscation.detector import ObfuscationDetector
-from app.detectors.registry import get_registered_detectors
+from sentinelcore.detectors.obfuscation.detector import ObfuscationDetector
+from sentinelcore.detectors.registry import get_registered_detectors
 
 
 def test_detector_is_registered():

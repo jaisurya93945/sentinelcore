@@ -2,7 +2,7 @@
 
 ## Implemented: Prompt Injection (Direct Attacks)
 
-**Detector:** `app/detectors/prompt_injection/`
+**Detector:** `sentinelcore/detectors/prompt_injection/`
 **Method:** Rules + heuristics (regex pattern matching) -- v0.1 baseline, no ML/semantic detection yet.
 
 ### Categories covered
@@ -23,7 +23,7 @@
 
 ## Implemented: Obfuscation
 
-**Detector:** `app/detectors/obfuscation/`
+**Detector:** `sentinelcore/detectors/obfuscation/`
 **Method:** Character/encoding-level checks -- deterministic, no ML.
 
 ### Categories covered
@@ -51,7 +51,7 @@ A zero-width space hidden inside the word "ignore" is **not** caught by the prom
 
 ## Implemented: Output Security (PII + Secrets)
 
-**Modules:** `app/detectors/pii/`, `app/detectors/secrets/`
+**Modules:** `sentinelcore/detectors/pii/`, `sentinelcore/detectors/secrets/`
 **Wired into:** `/api/v1/scan` (`output_text` field) and `/v1/chat/completions` (the assistant's actual reply).
 
 Two detectors, kept separate: PII and secrets have very different false-positive profiles and severities.
@@ -80,7 +80,7 @@ An **input** BLOCK prevents the upstream call entirely. An **output** BLOCK cann
 
 ## Implemented: RAG Context Scanning (Indirect Prompt Injection)
 
-**Module:** `app/api/v1/scan.py` (orchestration only -- no new detector)
+**Module:** `sentinelcore/api/v1/scan.py` (orchestration only -- no new detector)
 
 The existing detectors, applied to RAG-retrieved documents in addition to the user's own input. Every finding carries an `origin`: `"input"`, `"context:<index>"`, or `"output"`.
 
@@ -110,7 +110,7 @@ Real streaming, not buffer-then-dump. Rescanned incrementally after every chunk,
 
 ## Implemented: Agent / Tool-Call Inspection
 
-**Modules:** `app/services/tool_policy.py`, `app/detectors/tool_arguments/`
+**Modules:** `sentinelcore/services/tool_policy.py`, `sentinelcore/detectors/tool_arguments/`
 **Endpoint:** `POST /api/v1/scan/tool-call`
 
 Two independent checks: (1) deterministic tool-name authorization via `tool_policy.yaml` (allow/warn/sanitize/human_approval/block by name, not risk-scored -- "is this agent allowed to call payment.transfer" doesn't get more true by combining severities), and (2) content scanning of arguments and, if provided, the tool's response (untrusted input, same principle as a RAG document). Final decision is the more severe of the two, arrived at independently.
@@ -142,7 +142,7 @@ Three patterns added specifically for this: fake authority tags (`<IMPORTANT>`, 
 
 ## Implemented: Audit Logging
 
-**Module:** `app/services/audit_log.py`, queryable via `GET /api/v1/audit/recent`
+**Module:** `sentinelcore/services/audit_log.py`, queryable via `GET /api/v1/audit/recent`
 
 Every decision gets persisted to SQLite: `scan_id`, timestamp, endpoint, an optional `detail` (a controlled identifier like a tool name), risk score, decision, and a findings summary.
 
@@ -159,7 +159,7 @@ Raw input text, output text, and finding `evidence` are never persisted. The tem
 
 ## Implemented: Dashboard
 
-**Files:** `app/static/dashboard.html`, `app/api/v1/dashboard.py`
+**Files:** `sentinelcore/static/dashboard.html`, `sentinelcore/api/v1/dashboard.py`
 
 A single static HTML page, no build pipeline. Polls `GET /api/v1/audit/recent` every 5 seconds. Screenshotted against live seeded data before shipping, which caught and fixed two real issues: an illegible risk indicator, and tool-call/MCP entries with no indication of which tool was involved.
 
@@ -180,7 +180,7 @@ Multi-stage build, non-root user. **Not build-tested in this project's own devel
 
 ## Implemented: Authentication & Authorization
 
-**Module:** `app/core/auth.py`
+**Module:** `sentinelcore/core/auth.py`
 
 Real API-key authentication with 3 roles (viewer/operator/admin), applied via a genuine FastAPI dependency to every scan/tool-call/mcp/proxy/audit endpoint. **Off by default**: `SENTINELCORE_API_KEYS` unset means every endpoint behaves exactly as before this existed -- a real, named risk if the gateway is network-reachable without setting it. Health checks and the dashboard's static HTML shell stay unauthenticated by design.
 
@@ -197,7 +197,7 @@ The hardening spec this was built against sketched five roles (Viewer/Auditor/Op
 
 ## Implemented: Real Sanitize Enforcement
 
-**Module:** `app/services/sanitizer.py`
+**Module:** `sentinelcore/services/sanitizer.py`
 
 Until this existed, SANITIZE was a decision the policy engine could return with nothing behind it -- displayed, never executed. `decision` and `enforcement_status` are now separately represented (not conflated into one field that could silently mean either "we recommend this" or "we did this"): `decision` always reflects the final, actionable outcome after any enforcement attempt; `enforcement_status` (`enforced` / `escalated` / `not_implemented` / `not_applicable`) explains how it got there.
 
@@ -219,7 +219,7 @@ Collapsing a **multi-word** character-spaced run (e.g. an entire spaced-out sent
 
 ## Implemented: Provenance-Aware Risk Scoring
 
-**Module:** `app/services/origin_trust.py`, wired into `app/services/risk_engine.py`
+**Module:** `sentinelcore/services/origin_trust.py`, wired into `sentinelcore/services/risk_engine.py`
 
 Until this existed, `Finding.origin` was tracked faithfully and then ignored -- neither the risk engine nor the policy engine ever read it, which made "provenance-aware" a false claim. An instruction-override finding in a user's own message and the identical finding inside a retrieved document produced the same score and the same decision.
 
@@ -239,7 +239,7 @@ Running the full 744-example evaluation after this change produced **exactly zer
 
 ## Implemented: Learned Classifier Detector (optional, OFF by default)
 
-**Module:** `app/detectors/ml_classifier/`, trained by `scripts/train_ml_detector.py`
+**Module:** `sentinelcore/detectors/ml_classifier/`, trained by `scripts/train_ml_detector.py`
 
 TF-IDF (word 1-2 + char 3-5 grams) into a calibrated logistic regression. Held-out test: **P=93.65% R=85.51% F1=89.39% FPR=5.00% AUC=0.964**, against the rules baseline **measured on the identical split**: 27.54% recall, 100.00% precision, 0.00% FPR — a 3.10x recall improvement at a real precision cost. (The 17.68% figure is the baseline over all 744 examples and is not comparable to a split-based number.) Stratified seeded 60/20/20 split; the test split is touched once and never used for threshold selection.
 
@@ -259,7 +259,7 @@ If scikit-learn is absent, the model file is missing, or inference raises, this 
 
 ## Implemented: Human Approval Workflow
 
-**Modules:** `app/services/approvals.py`, `app/api/v1/approvals.py`
+**Modules:** `sentinelcore/services/approvals.py`, `sentinelcore/api/v1/approvals.py`
 
 `HUMAN_APPROVAL` was previously a decision returned with nothing behind it — the same defect `SANITIZE` had, and worse here, because it is reserved for the highest-consequence actions in the system. A tool call now creates a real, queryable approval record with a lifecycle: `PENDING → APPROVED | DENIED | EXPIRED`.
 
@@ -282,7 +282,7 @@ Deciding an approval requires the **admin** role; the scan endpoints require **o
 
 ## Implemented: Resource Protection (rate limiting + payload caps)
 
-**Modules:** `app/core/limits.py`, `app/core/middleware.py`
+**Modules:** `sentinelcore/core/limits.py`, `sentinelcore/core/middleware.py`
 
 A security gateway is itself a target. Regex scanning is linear in input length, the streaming path re-scans accumulated text, and the proxy forwards to a **paid** upstream — so an attacker who cannot get anything *past* the gateway can still take it down or run up the operator's provider bill. **Denial of wallet, not just denial of service.**
 

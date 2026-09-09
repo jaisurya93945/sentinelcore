@@ -1,7 +1,7 @@
 """Unit tests for tool-name authorization."""
 
-from app.models.finding import Decision
-from app.services.tool_policy import authorize_tool, load_tool_policy
+from sentinelcore.models.finding import Decision
+from sentinelcore.services.tool_policy import authorize_tool, load_tool_policy
 
 TEST_POLICY = {
     "default": "warn",

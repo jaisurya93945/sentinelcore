@@ -2,7 +2,7 @@
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from sentinelcore.main import app
 
 client = TestClient(app)
 
@@ -80,7 +80,7 @@ def test_unknown_tool_name_uses_default_policy():
 
 
 def test_tool_call_writes_an_audit_event():
-    from app.services.audit_log import get_recent_events
+    from sentinelcore.services.audit_log import get_recent_events
 
     client.post("/api/v1/scan/tool-call", json={"tool_name": "web.search", "arguments": {"q": "test"}})
     events = get_recent_events(limit=1)

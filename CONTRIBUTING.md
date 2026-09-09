@@ -20,7 +20,7 @@ class MyDetector(BaseDetector):
         return findings
 ```
 
-Drop the module under `app/detectors/`, then add one import line to `app/detectors/__init__.py` so the registration decorator actually runs (see how `prompt_injection`, `obfuscation`, `pii`, `secrets`, and `tool_arguments` are wired in there — same pattern, one more line).
+Drop the module under `sentinelcore/detectors/`, then add one import line to `sentinelcore/detectors/__init__.py` so the registration decorator actually runs (see how `prompt_injection`, `obfuscation`, `pii`, `secrets`, and `tool_arguments` are wired in there — same pattern, one more line).
 
 ## Running tests
 

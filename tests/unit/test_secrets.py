@@ -1,7 +1,7 @@
 """Unit tests for the secret/credential detector."""
 
-from app.detectors.registry import get_registered_detectors
-from app.detectors.secrets.detector import SecretDetector
+from sentinelcore.detectors.registry import get_registered_detectors
+from sentinelcore.detectors.secrets.detector import SecretDetector
 
 
 def test_detector_is_registered():

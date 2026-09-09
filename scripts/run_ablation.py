@@ -40,12 +40,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.detectors.ml_classifier.detector import HIGH_CONFIDENCE, REPORTING_FLOOR  # noqa: E402
-from app.detectors.registry import get_registered_detectors  # noqa: E402
-from app.models.finding import Decision, Finding, Severity  # noqa: E402
-from app.services.policy_engine import decide, load_policy, most_severe  # noqa: E402
-from app.services.risk_engine import calculate_risk_score  # noqa: E402
-from app.services.tool_policy import authorize_tool  # noqa: E402
+from sentinelcore.detectors.ml_classifier.detector import HIGH_CONFIDENCE, REPORTING_FLOOR  # noqa: E402
+from sentinelcore.detectors.registry import get_registered_detectors  # noqa: E402
+from sentinelcore.models.finding import Decision, Finding, Severity  # noqa: E402
+from sentinelcore.services.policy_engine import decide, load_policy, most_severe  # noqa: E402
+from sentinelcore.services.risk_engine import calculate_risk_score  # noqa: E402
+from sentinelcore.services.tool_policy import authorize_tool  # noqa: E402
 
 import os
 
@@ -204,8 +204,8 @@ def _scan(text: str, origin: str) -> list[Finding]:
 def _semantic_findings(text: str, origin: str) -> list[Finding]:
     """Semantic detector as an explicit ablation condition. Reads from the
     on-disk cache, so this costs nothing once the cache is warm."""
-    from app.core.config import settings as _s
-    from app.detectors.semantic.detector import SemanticDetector
+    from sentinelcore.core.config import settings as _s
+    from sentinelcore.detectors.semantic.detector import SemanticDetector
 
     prev = _s.semantic_detector_enabled
     _s.semantic_detector_enabled = True

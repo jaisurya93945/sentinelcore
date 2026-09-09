@@ -1,7 +1,7 @@
 """Unit tests for the audit log."""
 
-from app.models.finding import Finding, Severity
-from app.services.audit_log import get_recent_events, log_scan_event
+from sentinelcore.models.finding import Finding, Severity
+from sentinelcore.services.audit_log import get_recent_events, log_scan_event
 
 
 def _finding(type_="test_type", severity=Severity.LOW, origin="input"):
@@ -37,14 +37,14 @@ def test_recent_events_ordered_newest_first():
 
 
 def test_logging_failure_never_raises(monkeypatch):
-    from app.core.config import settings
+    from sentinelcore.core.config import settings
 
     monkeypatch.setattr(settings, "audit_db_path", "/nonexistent-dir-xyz/cannot-write.db")
     log_scan_event("scan-fail", "scan", 0, "allow", [])
 
 
 def test_disabled_audit_is_a_no_op(monkeypatch):
-    from app.core.config import settings
+    from sentinelcore.core.config import settings
 
     monkeypatch.setattr(settings, "audit_enabled", False)
     log_scan_event("scan-disabled", "scan", 0, "allow", [])

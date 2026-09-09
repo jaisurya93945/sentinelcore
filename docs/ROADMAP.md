@@ -10,11 +10,14 @@ Prioritized against what exists today, verified against `docs/CAPABILITY_MATRIX.
 
 ---
 
-## P0 — Make it adoptable (nothing else matters until this is done)
+## P0 — Make it adoptable  ·  **items 1–3 DONE**
 
-**1. Ship a real Python package.** `pip install sentinelcore`. Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify in a clean venv: `pip install dist/*.whl && python -c "import sentinelcore"`. **Do not publish to PyPI without explicit authorization.**
+Status as of `v0.4.0`: the package installs, imports, scans and ships a working CLI, verified in a clean virtualenv. Item 4 (a Dockerfile that has actually been built) remains open.
 
-**2. A stable public API — three integration shapes, because developers arrive with different constraints.**
+
+**1. Ship a real Python package. — DONE.** `pip install sentinelcore`. Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify in a clean venv: `pip install dist/*.whl && python -c "import sentinelcore"`. **Do not publish to PyPI without explicit authorization.**
+
+**2. A stable public API — DONE.** Three integration shapes, because developers arrive with different constraints:
 
 ```python
 from sentinelcore import Guard
@@ -25,9 +28,9 @@ app.add_middleware(guard.middleware())             # FastAPI/ASGI middleware
 # gateway: already exists as the reverse proxy
 ```
 
-The gateway exists; the library and middleware paths do not, and they are how most developers would actually adopt this.
+All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.api` remains the internal HTTP layer.
 
-**3. A CLI.** `sentinel doctor` (config sanity), `sentinel scan <path>` (pre-deployment), `sentinel proxy`, `sentinel policy test`, `sentinel mcp scan`. Human-readable and `--json`, with meaningful exit codes so it works in CI.
+**3. A CLI. — DONE.** `sentinel doctor` (config sanity), `sentinel scan <path>` (pre-deployment), `sentinel proxy`, `sentinel policy test`, `sentinel mcp scan`. Human-readable and `--json`, with meaningful exit codes so it works in CI.
 
 **4. Docker that is actually built and tested.** The current Dockerfile has never been built — flagged in the file itself. Build it, smoke-test it, publish nothing until it passes.
 

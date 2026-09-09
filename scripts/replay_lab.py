@@ -20,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from app.detectors.registry import get_registered_detectors  # noqa: E402
+from sentinelcore.detectors.registry import get_registered_detectors  # noqa: E402
 
 DATASET_PATH = Path(__file__).parent.parent / "dataset" / "processed" / "eval_set.jsonl"
 SNAPSHOT_DIR = Path(__file__).parent.parent / "dataset" / "processed" / "replay_snapshots"
