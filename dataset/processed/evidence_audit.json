@@ -1,0 +1,171 @@
+{
+  "artifacts_present": [
+    "ablation_results_v2.json",
+    "baseline_comparison.json",
+    "confidence_distribution.json",
+    "cross_source_analysis.json",
+    "eval_results.json",
+    "logprob_results.json",
+    "ml_detector_report.json",
+    "overdefense_results.json",
+    "semantic_results.json",
+    "statistical_validation.json",
+    "threshold_study.json"
+  ],
+  "artifacts_missing": [
+    "industry_comparison.json"
+  ],
+  "schema_notes": [
+    "CI schema differs between artifacts: statistical_validation.json uses ci95_low/ci95_high, threshold_study.json uses ci95. Normalised at read time; worth unifying at write time."
+  ],
+  "rows": [
+    {
+      "finding": "Detection: learned >> rules",
+      "experiment": "statistical_validation.py",
+      "dataset": "eval_set held-out",
+      "n": "149 x 10 seeds",
+      "configuration": "TF-IDF+logreg @0.5 vs rules",
+      "metric": "recall",
+      "result": "0.884 vs 0.185",
+      "uncertainty": "95% CI [0.829,0.965] vs [0.122,0.287]; McNemar max p=5.6e-06, 10/10 seeds significant",
+      "interpretation": "Non-overlapping CIs, paired test significant on every seed",
+      "publication_verdict": "SAFE",
+      "reason": ""
+    },
+    {
+      "finding": "Learned dominates rules at a matched operating point",
+      "experiment": "threshold_study.py",
+      "dataset": "eval_set held-out",
+      "n": "149 x 10 seeds",
+      "configuration": "threshold 0.80, selected on validation",
+      "metric": "recall / FPR",
+      "result": "recall 0.720 vs 0.185; FPR 0.011 vs 0.005",
+      "uncertainty": "recall CIs disjoint; FPR CIs OVERLAP [0.000,0.025] vs [0.000,0.022]",
+      "interpretation": "Recall gain significant; FPR increase is NOT statistically distinguishable",
+      "publication_verdict": "SAFE",
+      "reason": ""
+    },
+    {
+      "finding": "A fixed threshold reaches 0% FPR",
+      "experiment": "threshold_study.py",
+      "dataset": "eval_set",
+      "n": "149 x 10",
+      "configuration": "zero-FP threshold selected on validation",
+      "metric": "selected threshold",
+      "result": "range 0.61-0.98, std 0.125",
+      "uncertainty": "n/a",
+      "interpretation": "RETRACTED. No fixed threshold reliably reaches 0% FPR; the validation-selected one yields 0.011 FPR on test",
+      "publication_verdict": "UNSAFE",
+      "reason": "Formally withdrawn; must not reappear"
+    },
+    {
+      "finding": "Detector choice dominates policy",
+      "experiment": "run_ablation.py",
+      "dataset": "agent_traces_v2",
+      "n": "85 atk / 85 ben",
+      "configuration": "A_content_only -> J_ml_flat",
+      "metric": "APR",
+      "result": "0.282 -> 0.788 (+50.6pp)",
+      "uncertainty": "bootstrap [0.188,0.377] -> [0.694,0.871]",
+      "interpretation": "Largest single effect measured",
+      "publication_verdict": "SAFE",
+      "reason": ""
+    },
+    {
+      "finding": "Provenance under an ORACLE detector",
+      "experiment": "run_ablation.py",
+      "dataset": "agent_traces_v2",
+      "n": "85 atk / 85 ben",
+      "configuration": "H_oracleMED_flat -> I_oracleMED_prov",
+      "metric": "APR",
+      "result": "0.365 -> 0.835 (+47.1pp)",
+      "uncertainty": "bootstrap [0.259,0.471] -> [0.753,0.906]",
+      "interpretation": "Gain does not track detector strength",
+      "publication_verdict": "QUALIFIED",
+      "reason": "Oracle is a simulation with zero false positives by construction"
+    },
+    {
+      "finding": "Provenance under the learned detector",
+      "experiment": "run_ablation.py",
+      "dataset": "agent_traces_v2",
+      "n": "85 atk / 85 ben",
+      "configuration": "J_ml_flat -> K_ml_prov",
+      "metric": "APR",
+      "result": "0.788 -> 0.906 (+11.8pp)",
+      "uncertainty": "bootstrap [0.694,0.871] -> [0.835,0.965]",
+      "interpretation": "Gain does not track detector strength",
+      "publication_verdict": "QUALIFIED",
+      "reason": "CIs overlap at the edges; also operating-point dependent (+2.4 at floor 0.35)"
+    },
+    {
+      "finding": "Provenance under the semantic detector",
+      "experiment": "run_ablation.py",
+      "dataset": "agent_traces_v2",
+      "n": "85 atk / 85 ben",
+      "configuration": "L_semantic_flat -> M_semantic_prov",
+      "metric": "APR",
+      "result": "DEGENERATE -- identical to C/E",
+      "uncertainty": "n/a",
+      "interpretation": "The semantic cache is absent in this checkout, so the detector returned no findings and L/M collapsed onto C/E. The real values (reported elsewhere as 0.706 -> 0.718) are NOT reproducible from any artifact in this repository.",
+      "publication_verdict": "UNSAFE",
+      "reason": "No artifact here supports the semantic ablation numbers"
+    },
+    {
+      "finding": "LLM confidence has no usable middle (self-reported)",
+      "experiment": "confidence_distribution.py",
+      "dataset": "eval_set held-out",
+      "n": 149,
+      "configuration": "gpt-4o-mini verbalized vs TF-IDF",
+      "metric": "ambiguous share of findings",
+      "result": "0.026 vs 0.206",
+      "uncertainty": "descriptive; no CI",
+      "interpretation": "Semantic emits ~8 distinct values; learned emits 143",
+      "publication_verdict": "SAFE",
+      "reason": ""
+    },
+    {
+      "finding": "Log-probabilities do not recover the missing uncertainty",
+      "experiment": "logprob_experiment.py",
+      "dataset": "eval_set held-out",
+      "n": "51 of 149",
+      "configuration": "gpt-4o-mini, temperature 0, top_logprobs=20",
+      "metric": "distinct values / ambiguous band / confident errors",
+      "result": "8 / 1 / 100%",
+      "uncertainty": "PARTIAL: 98 texts outstanding",
+      "interpretation": "Same conclusion as verbalized; saturates harder",
+      "publication_verdict": "QUALIFIED",
+      "reason": "Partial run; restate at full n before publication"
+    },
+    {
+      "finding": "Over-defense behaviour on hard benign inputs",
+      "experiment": "evaluate_overdefense.py",
+      "dataset": "internal (benign + trigger words)",
+      "n": 5,
+      "configuration": "rules / learned@0.5 / learned@0.8",
+      "metric": "over-defense accuracy",
+      "result": "rules=1.00; learned@0.5=0.80; learned@0.8=1.00",
+      "uncertainty": "n=5 -- no statistical validity",
+      "interpretation": "UNMEASURED. Corpus has 5/399 hard negatives; external benchmark unreachable here",
+      "publication_verdict": "UNSAFE",
+      "reason": "n=5 cannot support any published claim"
+    },
+    {
+      "finding": "Performance vs an industry guardrail",
+      "experiment": "benchmark_industry.py",
+      "dataset": "Prompt Guard 2 vs held-out",
+      "n": "n/a",
+      "configuration": "n/a",
+      "metric": "n/a",
+      "result": "NOT RUN",
+      "uncertainty": "n/a",
+      "interpretation": "Blocked: huggingface.co unreachable from the dev sandbox",
+      "publication_verdict": "UNSAFE",
+      "reason": "No comparison against any incumbent exists yet"
+    }
+  ],
+  "verdict_counts": {
+    "SAFE": 4,
+    "UNSAFE": 4,
+    "QUALIFIED": 3
+  }
+}
