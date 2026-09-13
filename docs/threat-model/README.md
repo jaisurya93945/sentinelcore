@@ -328,6 +328,26 @@ No retry queue, no delivery guarantee, no persistence of undelivered alerts. **A
 
 `GET /api/v1/alerts/status` exposes dispatched/delivered/failed/dropped/suppressed counts, because an alerting system whose own failures are invisible is not much better than none — dropped and suppressed counts are how an operator discovers their webhook has been down all week.
 
+## Implemented: Operator Feedback (false-positive review queue)
+
+**Modules:** `sentinelcore/services/feedback.py`, `sentinelcore/api/v1/feedback.py`
+
+More than a UI feature. Finding 10 established that this project cannot measure over-defense — 5 hard negatives in 399 benign examples — and the published NotInject results show that is precisely where deployed detectors fail worst (PromptGuard at 0.88% over-defense accuracy).
+
+**An operator marking a block as wrong produces exactly the data that gap needs**: a benign input that a detector flagged, in production, on real traffic. `sentinel export-feedback` emits those as JSONL in the same schema as the evaluation corpus, so the review queue is a hard-negative collector that feeds the benchmark.
+
+### The retention boundary is the design
+
+Submitting feedback stores a `scan_id`, a verdict, and a note — **never the input**. Attaching the original text is a *separate call, requiring the admin role*. A security tool must not begin retaining user input as a side effect of someone clicking "this was wrong".
+
+The consequence is stated rather than engineered around: **exported cases carry no text unless someone deliberately supplied it**, and records without text are skipped during export and counted, because a case that cannot be replayed would pad the corpus with rows that look like data and are not.
+
+Reporting is **viewer**-level while retention is **admin**-level. The people who notice a wrongful block are the ones watching the dashboard; requiring an admin to file the report guarantees reports never happen.
+
+### The summary carries its own bias warning
+
+`GET /api/v1/feedback/summary` returns a reported-false-positive share **and a caveat stating it is selection-biased and not comparable to a measured FPR**. Only reviewed decisions appear, and a wrongful block is far more likely to be reported than a wrongful allow. A dashboard number without that warning attached would be quoted as an FPR within a week.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.

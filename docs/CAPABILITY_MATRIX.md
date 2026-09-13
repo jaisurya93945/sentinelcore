@@ -30,6 +30,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
 | Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). **RUN against a live API**: precision 97.44% recall 55.07% FPR 1.25% on the held-out split -- lower recall than the TF-IDF classifier's 72.0%. See Finding 6 |
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
+| Operator feedback / FP review queue, exports to eval-set schema | `tests/unit/test_feedback.py` -- 11 tests incl. the retention boundary |
 | Alerting (log/webhook/Slack sinks, bounded queue, shape-keyed cooldown) | `tests/unit/test_alerts.py` -- 12 tests focused on failure properties |
 | Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests |
 | Ablation isolation guards | `tests/unit/test_ablation_isolation.py` -- 6 tests asserting the baseline cannot move when optional detectors are enabled |

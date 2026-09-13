@@ -22,6 +22,9 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="check installation and configuration")
 
+    exp = sub.add_parser("export-feedback", help="export operator-reported false positives as benchmark cases")
+    exp.add_argument("--out", default="hard_negatives.jsonl")
+
     pol = sub.add_parser("policy", help="inspect policy presets")
     pol.add_argument("action", choices=["list", "show"], nargs="?", default="list")
     pol.add_argument("name", nargs="?", default=None)
@@ -42,6 +45,18 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return _doctor(args.json)
+
+    if args.command == "export-feedback":
+        from sentinelcore.services.feedback import export_hard_negatives, list_feedback, Verdict
+
+        total_fp = len(list_feedback(Verdict.FALSE_POSITIVE, limit=10000))
+        n = export_hard_negatives(args.out)
+        skipped = total_fp - n
+        print(f"exported {n} hard negatives to {args.out}")
+        if skipped:
+            print(f"skipped {skipped} false-positive report(s) with no supplied text "
+                  f"(a case with no text cannot be replayed)")
+        return 0 if n else 1
 
     if args.command == "policy":
         from sentinelcore import presets

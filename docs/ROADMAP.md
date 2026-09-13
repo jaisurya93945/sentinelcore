@@ -40,7 +40,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **6. Alerting. — DONE.** The audit trail exists; nothing watches it. Webhook and Slack sinks on BLOCK/HUMAN_APPROVAL, plus a rate-of-change trigger. Without this, "continuous monitoring" is a dashboard someone has to remember to open.
 
-**7. Dashboard beyond a live tail.** Decision-rate trends, top finding types, per-tool authorization outcomes, pending approvals, false-positive review queue. The FP review queue matters most: over-defense is the failure operators actually feel, and giving them a way to see and correct it is worth more than another detector.
+**7. Dashboard beyond a live tail. — PARTIAL.** Feedback/FP-review backend, API and CLI export are done; the dashboard UI sections are not. Decision-rate trends, top finding types, per-tool authorization outcomes, pending approvals, false-positive review queue. The FP review queue matters most: over-defense is the failure operators actually feel, and giving them a way to see and correct it is worth more than another detector.
 
 **8. Persistence that survives production.** SQLite with no migrations, no retention, no rotation, and a synchronous connection per write. Needs schema versioning, indexes, retention policy, and a Postgres option.
 

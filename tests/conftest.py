@@ -4,6 +4,7 @@ import pytest
 
 from sentinelcore.core.config import settings
 from sentinelcore.services.approvals import init_db as init_approvals
+from sentinelcore.services.feedback import init_db as init_feedback
 from sentinelcore.services.audit_log import init_db
 
 
@@ -15,4 +16,5 @@ def _isolated_audit_db(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "audit_db_path", str(tmp_path / "test_audit.db"))
     init_db()
     init_approvals()
+    init_feedback()
     yield

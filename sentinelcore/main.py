@@ -1,11 +1,12 @@
 from fastapi import FastAPI
 
 import sentinelcore.detectors  # noqa: F401  -- importing this triggers detector self-registration
-from sentinelcore.api.v1 import approvals, audit, dashboard, health, mcp, proxy, scan, tool_call
+from sentinelcore.api.v1 import approvals, audit, dashboard, feedback, health, mcp, proxy, scan, tool_call
 from sentinelcore.core.config import settings
 from sentinelcore.core.middleware import resource_protection_middleware
 from sentinelcore.services.alerts import get_manager, logging_sink, slack_sink, webhook_sink
 from sentinelcore.services.approvals import init_db as init_approvals
+from sentinelcore.services.feedback import init_db as init_feedback
 from sentinelcore.services.audit_log import init_db
 
 app = FastAPI(
@@ -16,6 +17,7 @@ app = FastAPI(
 
 init_db()
 init_approvals()
+init_feedback()
 
 
 def _configure_alerts() -> None:
@@ -42,6 +44,7 @@ app.include_router(tool_call.router, prefix="/api/v1", tags=["tool-call"])
 app.include_router(mcp.router, prefix="/api/v1", tags=["mcp"])
 app.include_router(audit.router, prefix="/api/v1", tags=["audit"])
 app.include_router(approvals.router, prefix="/api/v1", tags=["approvals"])
+app.include_router(feedback.router, prefix="/api/v1", tags=["feedback"])
 app.include_router(dashboard.router, tags=["dashboard"])  # /dashboard -- human-facing, not API-versioned
 # Mounted at /v1 (not /api/v1) on purpose: this path must match OpenAI's
 # own API exactly for SentinelCore to be a genuine drop-in base_url swap.
