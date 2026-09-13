@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
     max_request_bytes: int = 1_000_000  # 1MB; scanning cost is linear in input length
+    # Alerting. Off unless a sink is configured; the log sink costs nothing
+    # and is the sensible default for a first deployment.
+    alerts_log_enabled: bool = True
+    alerts_webhook_url: str = ""
+    alerts_slack_webhook_url: str = ""
+    alerts_cooldown_seconds: float = 60.0
     approval_ttl_seconds: int = 3600  # unanswered approvals EXPIRE, and expiry is a refusal
     semantic_detector_enabled: bool = False  # optional LLM detector; SENDS TEXT TO A THIRD PARTY
     semantic_model: str = "gpt-4o-mini"

@@ -4,6 +4,7 @@ import sentinelcore.detectors  # noqa: F401  -- importing this triggers detector
 from sentinelcore.api.v1 import approvals, audit, dashboard, health, mcp, proxy, scan, tool_call
 from sentinelcore.core.config import settings
 from sentinelcore.core.middleware import resource_protection_middleware
+from sentinelcore.services.alerts import get_manager, logging_sink, slack_sink, webhook_sink
 from sentinelcore.services.approvals import init_db as init_approvals
 from sentinelcore.services.audit_log import init_db
 
@@ -15,6 +16,23 @@ app = FastAPI(
 
 init_db()
 init_approvals()
+
+
+def _configure_alerts() -> None:
+    """Sinks are configured once at startup from environment settings. A
+    failure to configure one must not prevent the gateway from starting --
+    a broken webhook URL is not a reason to refuse to serve traffic."""
+    mgr = get_manager()
+    mgr.cooldown_seconds = settings.alerts_cooldown_seconds
+    if settings.alerts_log_enabled:
+        mgr.register("log", logging_sink())
+    if settings.alerts_webhook_url:
+        mgr.register("webhook", webhook_sink(settings.alerts_webhook_url))
+    if settings.alerts_slack_webhook_url:
+        mgr.register("slack", slack_sink(settings.alerts_slack_webhook_url))
+
+
+_configure_alerts()
 
 app.middleware("http")(resource_protection_middleware)
 

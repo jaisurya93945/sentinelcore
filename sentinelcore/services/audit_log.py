@@ -109,6 +109,18 @@ def log_scan_event(
     except Exception as e:
         logger.warning(f"Audit log write failed (request was not affected): {e}")
 
+    # Alerting hangs off the audit path deliberately: every decision in the
+    # system already flows through here, so there is exactly one place to
+    # wire it and no way for a new endpoint to silently skip it. It is
+    # AFTER the durable write and cannot affect it -- the audit record is
+    # the security record; an alert is only a notification.
+    try:
+        from sentinelcore.services.alerts import get_manager
+
+        get_manager().notify(scan_id, endpoint, decision, risk_score, findings, detail)
+    except Exception as e:
+        logger.warning(f"Alert dispatch failed (request and audit unaffected): {e}")
+
 
 def get_recent_events(limit: int = 50) -> list[dict]:
     if not settings.audit_enabled:

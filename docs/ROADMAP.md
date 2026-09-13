@@ -38,7 +38,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **5. Named policy presets. — DONE.** `strict` / `balanced` / `permissive`, each with its measured operating point published from the ablation. The security/utility frontier is this project's most defensible result; presets are how it reaches a user. This is the product surface of Findings 5–9.
 
-**6. Alerting.** The audit trail exists; nothing watches it. Webhook and Slack sinks on BLOCK/HUMAN_APPROVAL, plus a rate-of-change trigger. Without this, "continuous monitoring" is a dashboard someone has to remember to open.
+**6. Alerting. — DONE.** The audit trail exists; nothing watches it. Webhook and Slack sinks on BLOCK/HUMAN_APPROVAL, plus a rate-of-change trigger. Without this, "continuous monitoring" is a dashboard someone has to remember to open.
 
 **7. Dashboard beyond a live tail.** Decision-rate trends, top finding types, per-tool authorization outcomes, pending approvals, false-positive review queue. The FP review queue matters most: over-defense is the failure operators actually feel, and giving them a way to see and correct it is worth more than another detector.
 

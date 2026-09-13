@@ -298,6 +298,36 @@ Two controls, ordered deliberately: payload size is checked from `Content-Length
 
 Health checks are exempt: rate-limiting them would let load convince an orchestrator that a healthy service is down, turning a protection into an outage amplifier. The API key is truncated before it enters limiter state, so full credentials never reach that structure.
 
+## Implemented: Alerting
+
+**Module:** `sentinelcore/services/alerts.py`, status at `GET /api/v1/alerts/status`
+
+The audit trail was complete from early on and nothing watched it, which made "continuous monitoring" a dashboard someone had to remember to open. Alerting hangs off the audit write path deliberately: every decision in the system already flows through there, so there is exactly one wiring point and no way for a new endpoint to silently skip it.
+
+### The constraint that shaped every decision
+
+**An alert path that can hang, crash, or slow the gateway is worse than no alert path.** A webhook endpoint going down must not take the security control plane with it. Therefore: dispatch is fire-and-forget on a background thread, every sink failure is caught and logged rather than raised, and a **bounded queue drops the oldest alerts under pressure** rather than growing — an unbounded queue under attack is a memory-exhaustion vector inside the component whose job is preventing resource exhaustion.
+
+Alerting runs *after* the durable audit write and cannot affect it.
+
+### Cooldown keyed on attack shape, not on events
+
+Rate limiting per `(endpoint, decision, finding-types)` means a client looping one attack produces one alert instead of thousands, while a **genuinely new attack shape still gets through immediately**. Keying on events would either flood or suppress the thing you most need to see.
+
+### WARN never alerts
+
+A warning stops nothing, and alerting on it trains operators to ignore alerts. Only BLOCK and HUMAN_APPROVAL trigger by default.
+
+### Redaction
+
+Alerts carry finding *types*, severities, decision and risk score — never raw scanned text or finding evidence. Same reasoning as the audit log, more urgently: a notification channel routed to Slack or email is one of the least controlled places a secret could end up. Tested directly.
+
+### Deliberately absent
+
+No retry queue, no delivery guarantee, no persistence of undelivered alerts. **Alerts are a notification channel, not an audit record.** The audit log is the record and is written synchronously; conflating them would mean a missed webhook looked like a missing security event, which is the more dangerous failure.
+
+`GET /api/v1/alerts/status` exposes dispatched/delivered/failed/dropped/suppressed counts, because an alerting system whose own failures are invisible is not much better than none — dropped and suppressed counts are how an operator discovers their webhook has been down all week.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.
