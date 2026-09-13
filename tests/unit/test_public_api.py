@@ -24,7 +24,7 @@ def test_version_is_set():
 
 
 def test_presets_and_rejection_of_unknown():
-    for p in ("strict", "balanced", "permissive"):
+    for p in ("monitor", "balanced", "strict", "maximum"):
         assert isinstance(Guard(policy=p), Guard)
     with pytest.raises(ValueError):
         Guard(policy="nonexistent")
@@ -116,3 +116,86 @@ def test_cli_rejects_bad_json_arguments():
     from sentinelcore.cli import main
 
     assert main(["tool", "web.search", "--args", "{not json"]) == 3
+
+
+# --- policy presets: measured operating points, and behaviour that matches ---
+
+def test_every_preset_carries_a_measured_operating_point():
+    """A preset with no measurement behind it is a guess wearing a label."""
+    from sentinelcore import presets
+
+    for name, p in presets.PRESETS.items():
+        assert p.ablation_config, f"{name} cites no ablation configuration"
+        assert 0.0 <= p.apr <= 1.0 and 0.0 <= p.bcr <= 1.0
+        assert p.apr_ci[0] <= p.apr <= p.apr_ci[1], f"{name}: APR outside its own CI"
+        assert p.bcr_ci[0] <= p.bcr <= p.bcr_ci[1], f"{name}: BCR outside its own CI"
+        assert p.trade_off
+
+
+def test_preset_numbers_match_the_ablation_artifact():
+    """Guards against presets drifting from the experiment they cite."""
+    import json
+    from pathlib import Path
+
+    from sentinelcore import presets
+
+    art = Path(__file__).parent.parent.parent / "dataset" / "processed" / "ablation_results_v2.json"
+    if not art.exists():
+        pytest.skip("ablation artifact not generated")
+    summary = json.loads(art.read_text())["summary"]
+
+    for name, p in presets.PRESETS.items():
+        cfg = summary.get(p.ablation_config)
+        assert cfg, f"{name} cites {p.ablation_config}, which is not in the artifact"
+        assert abs(cfg["attack_prevention_rate"] - p.apr) < 0.001, f"{name} APR drifted from the artifact"
+        assert abs(cfg["benign_completion_rate"] - p.bcr) < 0.001, f"{name} BCR drifted from the artifact"
+
+
+def test_presets_are_ordered_along_the_frontier():
+    """More prevention must cost more utility, or the frontier is incoherent."""
+    from sentinelcore import presets
+
+    ordered = [presets.PRESETS[n] for n in ("monitor", "balanced", "strict", "maximum")]
+    assert [p.apr for p in ordered] == sorted(p.apr for p in ordered)
+    assert [p.bcr for p in ordered] == sorted((p.bcr for p in ordered), reverse=True)
+
+
+def test_presets_actually_change_behaviour():
+    """A preset that does not alter a decision is decoration."""
+    monitor = Guard(policy="monitor").check_tool_call("database.delete", {"table": "logs"})
+    balanced = Guard(policy="balanced").check_tool_call("database.delete", {"table": "logs"})
+    assert monitor.allowed, "monitor must not enforce tool authorization"
+    assert not balanced.allowed, "balanced must enforce tool authorization"
+
+
+def test_operating_point_is_reported():
+    assert "APR" in Guard(policy="strict").operating_point()
+
+
+def test_cli_policy_list_and_show():
+    from sentinelcore.cli import main
+
+    assert main(["policy", "list"]) == 0
+    assert main(["policy", "show", "balanced"]) == 0
+    assert main(["policy", "show", "nonexistent"]) == 3
+
+
+def test_constructing_a_guard_does_not_mutate_global_state():
+    """Regression: an earlier version enabled the ML detector on the global
+    settings object at construction, which leaked into every other consumer
+    in the process and broke seven unrelated tests. A library must not
+    change behaviour elsewhere just by being instantiated."""
+    from sentinelcore.core.config import settings
+
+    before = (settings.ml_detector_enabled, settings.semantic_detector_enabled)
+    g = Guard(policy="strict")
+    assert (settings.ml_detector_enabled, settings.semantic_detector_enabled) == before
+    g.scan("hello")
+    assert (settings.ml_detector_enabled, settings.semantic_detector_enabled) == before
+
+
+def test_two_guards_with_different_presets_coexist():
+    a, b = Guard(policy="monitor"), Guard(policy="maximum")
+    assert a.check_tool_call("database.delete", {"t": "x"}).allowed
+    assert not b.check_tool_call("database.delete", {"t": "x"}).allowed
+    assert a.check_tool_call("database.delete", {"t": "x"}).allowed  # unchanged by b

@@ -22,9 +22,13 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("doctor", help="check installation and configuration")
 
+    pol = sub.add_parser("policy", help="inspect policy presets")
+    pol.add_argument("action", choices=["list", "show"], nargs="?", default="list")
+    pol.add_argument("name", nargs="?", default=None)
+
     s = sub.add_parser("scan", help="scan text or a file")
     s.add_argument("target", help="text to scan, or - to read stdin")
-    s.add_argument("--policy", default="balanced")
+    s.add_argument("--policy", default="balanced", help="monitor | balanced | strict | maximum")
     s.add_argument("--origin", default="input")
 
     t = sub.add_parser("tool", help="check a tool call")
@@ -38,6 +42,30 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return _doctor(args.json)
+
+    if args.command == "policy":
+        from sentinelcore import presets
+
+        if args.action == "show" and args.name:
+            try:
+                pr = presets.get(args.name)
+            except ValueError as e:
+                print(f"error: {e}", file=sys.stderr)
+                return 3
+            if args.json:
+                print(json.dumps(pr.__dict__, indent=2, default=str))
+            else:
+                print(f"{pr.name}\n\n  {pr.description}\n")
+                print(f"  measured as: {pr.ablation_config}")
+                print(f"  APR: {pr.apr:.1%} [{pr.apr_ci[0]:.1%}-{pr.apr_ci[1]:.1%}]")
+                print(f"  BCR: {pr.bcr:.1%} [{pr.bcr_ci[0]:.1%}-{pr.bcr_ci[1]:.1%}]\n")
+                print(f"  trade-off: {pr.trade_off}")
+            return 0
+        if args.json:
+            print(json.dumps({k: v.__dict__ for k, v in presets.PRESETS.items()}, indent=2, default=str))
+        else:
+            print(presets.compare())
+        return 0
 
     from sentinelcore import Guard
 

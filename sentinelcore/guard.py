@@ -20,6 +20,7 @@ caller inspects; `guard()` raises for callers who want fail-fast. Both are
 explicit, neither is the hidden default.
 """
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
@@ -68,14 +69,7 @@ class ScanOutcome:
         }
 
 
-# Named presets. The operating points are the ones this project actually
-# measured (docs/research/README.md); a preset that was not measured would
-# be a guess wearing a label.
-PRESETS: dict[str, dict[str, Any]] = {
-    "strict": {"detectors": None, "sanitize": True, "ml": True},
-    "balanced": {"detectors": None, "sanitize": True, "ml": False},
-    "permissive": {"detectors": None, "sanitize": False, "ml": False},
-}
+from sentinelcore import presets as _presets
 
 
 class Guard:
@@ -98,40 +92,65 @@ class Guard:
         enable_semantic: bool | None = None,
     ):
         if isinstance(policy, str):
-            if policy not in PRESETS:
-                raise ValueError(f"unknown preset {policy!r}; expected one of {sorted(PRESETS)}")
-            self._preset = PRESETS[policy]
+            self.preset = _presets.get(policy)   # raises ValueError on unknown
             self._policy_name = policy
         else:
-            self._preset = {**PRESETS["balanced"], **policy}
+            base = _presets.get(_presets.DEFAULT)
+            self.preset = base
             self._policy_name = "custom"
+            self._overrides = policy
 
         self._policy = load_policy()
-        # Optional detectors stay opt-in. Enabling ML by preset would make
-        # scikit-learn a de facto requirement of `pip install sentinelcore`.
-        if enable_ml is not None:
-            settings.ml_detector_enabled = enable_ml
-        if enable_semantic is not None:
-            settings.semantic_detector_enabled = enable_semantic
+        # A preset that does not change behaviour is decoration. Provenance
+        # rules are the one policy knob the ablation showed to matter, so
+        # presets that disable them must actually disable them.
+        if not self.preset.provenance_rules:
+            self._policy = {**self._policy, "origin_rules": {}}
+        # Detector enablement is held PER GUARD and applied only for the
+        # duration of a call. An earlier version set it on the global
+        # settings object at construction time, which leaked into every
+        # other consumer in the process -- a library that mutates global
+        # state when you instantiate it will interfere with its host
+        # application, and it broke seven unrelated tests before it was
+        # caught. See _active() below.
+        self._want_ml = enable_ml if enable_ml is not None else self.preset.requires_ml
+        self._want_semantic = enable_semantic if enable_semantic is not None else False
 
     # ---------------------------------------------------------------- core
+
+    @contextmanager
+    def _active(self):
+        """Applies this Guard's detector selection for the duration of one
+        call, then restores whatever was there before. Scoped rather than
+        global so two Guards with different presets can coexist, and so
+        constructing a Guard never changes behaviour elsewhere."""
+        prev_ml = settings.ml_detector_enabled
+        prev_sem = settings.semantic_detector_enabled
+        settings.ml_detector_enabled = self._want_ml
+        settings.semantic_detector_enabled = self._want_semantic
+        try:
+            yield
+        finally:
+            settings.ml_detector_enabled = prev_ml
+            settings.semantic_detector_enabled = prev_sem
 
     def scan(self, text: str, *, origin: str = "input") -> ScanOutcome:
         """Scan one piece of text. `origin` is the provenance class and it
         affects the outcome -- see docs/research/README.md; passing the
         default for retrieved content silently discards that signal."""
         findings: list[Finding] = []
-        for cls in get_registered_detectors().values():
-            found = cls().detect(text)
-            for f in found:
-                f.origin = origin
-            findings.extend(found)
+        with self._active():
+            for cls in get_registered_detectors().values():
+                found = cls().detect(text)
+                for f in found:
+                    f.origin = origin
+                findings.extend(found)
 
         score = calculate_risk_score(findings)
         decision = decide(findings, score, policy=self._policy)
         outcome = ScanOutcome(decision=decision, risk_score=score, findings=findings)
 
-        if decision == Decision.SANITIZE and self._preset.get("sanitize", True):
+        if decision == Decision.SANITIZE and self.preset.sanitize:
             result = enforce_sanitize(text, findings)
             outcome.sanitized_text = result.sanitized_text
             outcome.enforcement_status = result.enforcement_status
@@ -145,12 +164,13 @@ class Guard:
         """Retrieved/RAG content. Tagged `context:<i>`, which the risk
         engine weights above user input."""
         findings: list[Finding] = []
-        for i, doc in enumerate(documents):
-            for cls in get_registered_detectors().values():
-                found = cls().detect(doc)
-                for f in found:
-                    f.origin = f"context:{i}"
-                findings.extend(found)
+        with self._active():
+            for i, doc in enumerate(documents):
+                for cls in get_registered_detectors().values():
+                    found = cls().detect(doc)
+                    for f in found:
+                        f.origin = f"context:{i}"
+                    findings.extend(found)
         score = calculate_risk_score(findings)
         return ScanOutcome(decision=decide(findings, score, policy=self._policy),
                            risk_score=score, findings=findings)
@@ -162,15 +182,22 @@ class Guard:
         import json
 
         findings: list[Finding] = []
-        for cls in get_registered_detectors().values():
-            found = cls().detect(json.dumps(arguments))
-            for f in found:
-                f.origin = f"tool_arguments:{name}"
-            findings.extend(found)
+        with self._active():
+            for cls in get_registered_detectors().values():
+                found = cls().detect(json.dumps(arguments))
+                for f in found:
+                    f.origin = f"tool_arguments:{name}"
+                findings.extend(found)
 
         score = calculate_risk_score(findings)
         content = decide(findings, score, policy=self._policy)
-        final = most_severe([content, authorize_tool(name)])
+        # Tool authorization is what the ablation showed to carry the
+        # structural-attack category; a preset that turns it off is a real
+        # reduction in coverage, not a tuning detail.
+        candidates = [content]
+        if self.preset.tool_authorization:
+            candidates.append(authorize_tool(name))
+        final = most_severe(candidates)
         return ScanOutcome(decision=final, risk_score=score, findings=findings)
 
     def guard(self, text: str, *, origin: str = "input") -> ScanOutcome:
@@ -217,6 +244,11 @@ class Guard:
             return await call_next(request)
 
         return _mw
+
+    def operating_point(self) -> str:
+        """What this configuration measured on the agent benchmark. Not a
+        guarantee about your traffic -- see sentinelcore/presets.py."""
+        return self.preset.summary()
 
     def __repr__(self) -> str:
         return f"Guard(policy={self._policy_name!r})"

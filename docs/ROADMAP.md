@@ -32,11 +32,11 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **3. A CLI. — DONE.** `sentinel doctor` (config sanity), `sentinel scan <path>` (pre-deployment), `sentinel proxy`, `sentinel policy test`, `sentinel mcp scan`. Human-readable and `--json`, with meaningful exit codes so it works in CI.
 
-**4. Docker that is actually built and tested.** The current Dockerfile has never been built — flagged in the file itself. Build it, smoke-test it, publish nothing until it passes.
+**4. Docker that is actually built and tested.** The current Dockerfile has never been built — flagged in the file itself. **Still open**: no container runtime is available in the development environment (`docker`, `podman`, `buildah` all absent), so this cannot be verified here. Recorded in `docs/evidence/BLOCKED_RUNS.md`.
 
 ## P1 — Close the loop developers expect
 
-**5. Named policy presets.** `strict` / `balanced` / `permissive`, each with its measured operating point published from the ablation. The security/utility frontier is this project's most defensible result; presets are how it reaches a user. This is the product surface of Findings 5–9.
+**5. Named policy presets. — DONE.** `strict` / `balanced` / `permissive`, each with its measured operating point published from the ablation. The security/utility frontier is this project's most defensible result; presets are how it reaches a user. This is the product surface of Findings 5–9.
 
 **6. Alerting.** The audit trail exists; nothing watches it. Webhook and Slack sinks on BLOCK/HUMAN_APPROVAL, plus a rate-of-change trigger. Without this, "continuous monitoring" is a dashboard someone has to remember to open.
 

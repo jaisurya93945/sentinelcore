@@ -27,6 +27,15 @@ Per the standing rule: when an experiment cannot be executed, record the attempt
 | **Fallback executed** | `--dataset internal`, **n=5**, recorded in `dataset/processed/overdefense_results.json` |
 | **Fallback validity** | **NONE for conclusions.** n=5. The script prints an explicit too-small warning. It exists to prove the pipeline runs |
 
+## 3. Docker image build
+
+| | |
+|---|---|
+| **Command** | `docker build -t sentinelcore .` |
+| **Status** | **NOT RUN — blocked** |
+| **Failure** | no container runtime in the dev environment: `docker`, `podman` and `buildah` are all absent |
+| **Consequence** | the `Dockerfile` has still never been built. The caveat at the top of the file stands and must not be removed |
+
 ## What is therefore unproven
 
 - SentinelCore's detection performance **relative to any industry guardrail**. Every comparison to date is against our own weaker rules baseline.

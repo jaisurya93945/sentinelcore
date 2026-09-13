@@ -74,6 +74,22 @@ guard.check_tool_call("database.delete", {"table": "logs"})
 
 `outcome.allowed` is True only for ALLOW and WARN. SANITIZE means *use `outcome.sanitized_text`*, not *proceed anyway*.
 
+### Policy presets carry their measured operating point
+
+| preset | attack prevention | benign completion | needs |
+|---|---|---|---|
+| `monitor` | 28.2% [19–38%] | 100.0% | core |
+| `balanced` | 40.0% [29–51%] | 98.8% [96–100%] | core |
+| `strict` | 78.8% [69–87%] | 91.8% [86–98%] | `[ml]` |
+| `maximum` | 90.6% [84–96%] | 84.7% [76–92%] | `[ml]` |
+
+Measured on 85 attack / 85 benign agent traces (`scripts/run_ablation.py`), with bootstrap 95% intervals. **These describe behaviour on that benchmark, not a guarantee about your traffic** — re-measure with your own traces. Over-defense against benign text that discusses attacks is **unmeasured**; see Finding 10.
+
+```bash
+sentinel policy list
+sentinel policy show balanced
+```
+
 Command line:
 
 ```bash
