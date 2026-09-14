@@ -12,7 +12,9 @@ Prioritized against what exists today, verified against `docs/CAPABILITY_MATRIX.
 
 ## P0 — Make it adoptable  ·  **items 1–3 DONE**
 
-Status as of `v0.4.0`: the package installs, imports, scans and ships a working CLI, verified in a clean virtualenv. Item 4 (a Dockerfile that has actually been built) remains open.
+Status as of `v0.4.0`: the package installs, imports, scans and ships a working CLI, verified in a clean virtualenv (784KB installed, three core dependencies). Release infrastructure uses PyPI Trusted Publishing — no API token exists anywhere. Item 4 (a Dockerfile that has actually been built) remains open: no container runtime in the dev environment.
+
+**`sentinelcore` is available on PyPI.** Note `sentinel-core` is taken by an unrelated project — a hyphen typo lands users on someone else's package. Release procedure: `docs/RELEASE.md`.
 
 
 **1. Ship a real Python package. — DONE.** `pip install sentinelcore`. Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify in a clean venv: `pip install dist/*.whl && python -c "import sentinelcore"`. **Do not publish to PyPI without explicit authorization.**
