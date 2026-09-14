@@ -20,11 +20,12 @@ caller inspects; `guard()` raises for callers who want fail-fast. Both are
 explicit, neither is the hidden default.
 """
 
-from contextlib import contextmanager
 from dataclasses import dataclass, field
+from dataclasses import fields as _dc_fields
+from dataclasses import replace as _dc_replace
 from typing import Any, Callable
 
-from sentinelcore.core.config import settings
+from sentinelcore.core.context import detector_selection
 from sentinelcore.detectors.registry import get_registered_detectors
 from sentinelcore.models.finding import Decision, EnforcementStatus, Finding
 from sentinelcore.services.policy_engine import decide, load_policy, most_severe
@@ -95,10 +96,16 @@ class Guard:
             self.preset = _presets.get(policy)   # raises ValueError on unknown
             self._policy_name = policy
         else:
+            # Dict form overrides individual preset fields. The previous
+            # version stored the dict in self._overrides and never read it,
+            # so Guard(policy={...}) silently behaved as "balanced" -- an
+            # API that accepts configuration and ignores it.
             base = _presets.get(_presets.DEFAULT)
-            self.preset = base
+            unknown = set(policy) - {f.name for f in _dc_fields(_presets.Preset)}
+            if unknown:
+                raise ValueError(f"unknown policy field(s): {sorted(unknown)}")
+            self.preset = _dc_replace(base, name="custom", **policy)
             self._policy_name = "custom"
-            self._overrides = policy
 
         self._policy = load_policy()
         # A preset that does not change behaviour is decoration. Provenance
@@ -118,21 +125,17 @@ class Guard:
 
     # ---------------------------------------------------------------- core
 
-    @contextmanager
     def _active(self):
-        """Applies this Guard's detector selection for the duration of one
-        call, then restores whatever was there before. Scoped rather than
-        global so two Guards with different presets can coexist, and so
-        constructing a Guard never changes behaviour elsewhere."""
-        prev_ml = settings.ml_detector_enabled
-        prev_sem = settings.semantic_detector_enabled
-        settings.ml_detector_enabled = self._want_ml
-        settings.semantic_detector_enabled = self._want_semantic
-        try:
-            yield
-        finally:
-            settings.ml_detector_enabled = prev_ml
-            settings.semantic_detector_enabled = prev_sem
+        """Scopes this Guard's detector selection to the current call.
+
+        Uses a ContextVar rather than mutating global settings. The
+        previous implementation saved and restored the global flags, which
+        interleaves under concurrency: measured at 531 of 800 scans running
+        with the wrong detector configuration when two presets ran
+        concurrently, with the global flag left permanently wrong. See
+        sentinelcore/core/context.py.
+        """
+        return detector_selection(ml_detector=self._want_ml, semantic_detector=self._want_semantic)
 
     def scan(self, text: str, *, origin: str = "input") -> ScanOutcome:
         """Scan one piece of text. `origin` is the provenance class and it

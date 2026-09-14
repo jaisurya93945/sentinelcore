@@ -51,6 +51,7 @@ import time
 from pathlib import Path
 
 from sentinelcore.core.config import settings
+from sentinelcore.core.context import detector_enabled
 from sentinelcore.detectors.base import BaseDetector
 from sentinelcore.detectors.registry import register_detector
 from sentinelcore.models.finding import Finding, Severity
@@ -280,7 +281,7 @@ class SemanticDetector(BaseDetector):
     name = "semantic"
 
     def detect(self, text: str, context: dict | None = None) -> list[Finding]:
-        if not settings.semantic_detector_enabled or not text.strip():
+        if not detector_enabled("semantic_detector") or not text.strip():
             return []
 
         p = classify(text)

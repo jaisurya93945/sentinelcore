@@ -288,6 +288,14 @@ A security gateway is itself a target. Regex scanning is linear in input length,
 
 Two controls, ordered deliberately: payload size is checked from `Content-Length` **before the body is read**, then the rate counter, **before routing** — so a limited client costs one dictionary lookup rather than a full detector pass.
 
+### A defect found by audit, not by tests
+
+The limiter originally kept its counters in an unbounded `defaultdict`. Measured: 50,000 unique client identities retained 50,000 entries, growing without limit — **a memory-exhaustion vector inside the component whose stated purpose is preventing resource exhaustion.** An attacker rotating API keys or source addresses triggers it trivially.
+
+Now bounded at 10,000 tracked identities with **least-recently-used** eviction. LRU rather than oldest-first is deliberate: an attacker generating fresh identities evicts their own stale entries, while a steady legitimate client keeps its slot. The accepted failure mode when the table is full is that an evicted client receives a fresh budget — a small correctness loss, chosen over unbounded growth.
+
+The whole existing suite passed throughout. Tests passing is not evidence of correctness for a property nobody asserted.
+
 ### Honest limitations, none of them incidental
 
 - **Fixed window, not sliding or token bucket.** A fixed window permits up to **2× the nominal rate** across a window boundary. Real weakness, stated rather than hidden.

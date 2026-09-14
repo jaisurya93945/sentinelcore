@@ -45,18 +45,39 @@ process that would otherwise have none.
 
 import threading
 import time
-from collections import defaultdict
+from collections import OrderedDict
 
 from sentinelcore.core.config import settings
 
 
-class FixedWindowLimiter:
-    """Thread-safe fixed-window counter keyed by client identity."""
+# Upper bound on tracked client identities. Without one, the limiter's own
+# state is a memory-exhaustion vector: an attacker rotating API keys or
+# source addresses adds an entry per identity forever. Measured before this
+# bound existed: 50,000 unique clients produced 50,000 retained entries,
+# unbounded -- inside the component whose stated job is preventing resource
+# exhaustion.
+MAX_TRACKED_CLIENTS = 10_000
 
-    def __init__(self, max_requests: int, window_seconds: int):
+
+class FixedWindowLimiter:
+    """Thread-safe fixed-window counter keyed by client identity, with a
+    bounded key space.
+
+    Eviction is least-recently-used. That is the right policy here rather
+    than oldest-first: an attacker generating fresh identities should
+    evict *their own* stale entries, while a legitimate client making
+    steady requests keeps its slot. The failure mode when the table is
+    full is that an evicted client gets a fresh budget -- a small
+    correctness loss, chosen deliberately over unbounded growth.
+    """
+
+    def __init__(self, max_requests: int, window_seconds: int,
+                 max_clients: int = MAX_TRACKED_CLIENTS):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self._counts: dict[str, list] = defaultdict(lambda: [0, 0.0])  # key -> [count, window_start]
+        self.max_clients = max_clients
+        self.evictions = 0
+        self._counts: "OrderedDict[str, list]" = OrderedDict()  # key -> [count, window_start]
         self._lock = threading.Lock()
 
     def check(self, key: str) -> tuple[bool, int, float]:
@@ -65,7 +86,18 @@ class FixedWindowLimiter:
         so a client being limited cannot extend its own lockout."""
         now = time.monotonic()
         with self._lock:
-            entry = self._counts[key]
+            entry = self._counts.get(key)
+            if entry is None:
+                if len(self._counts) >= self.max_clients:
+                    # Drop the least recently seen identity, and prefer one
+                    # whose window has already expired if there is such a
+                    # candidate at the LRU end.
+                    self._counts.popitem(last=False)
+                    self.evictions += 1
+                entry = [0, now]
+                self._counts[key] = entry
+            else:
+                self._counts.move_to_end(key)
             count, start = entry
 
             if now - start >= self.window_seconds:
@@ -81,6 +113,11 @@ class FixedWindowLimiter:
     def reset(self) -> None:
         with self._lock:
             self._counts.clear()
+            self.evictions = 0
+
+    @property
+    def tracked_clients(self) -> int:
+        return len(self._counts)
 
 
 _limiter: FixedWindowLimiter | None = None

@@ -80,6 +80,11 @@ class Alert:
 
 @dataclass
 class AlertStats:
+    """Counters are incremented under the manager's lock. `+=` on an int is
+    a load-add-store, not an atomic operation, so unsynchronised updates
+    from the request path and the worker thread silently lose counts -- and
+    these numbers are how an operator discovers a webhook has been down."""
+
     dispatched: int = 0
     delivered: int = 0
     failed: int = 0
@@ -161,10 +166,12 @@ class AlertManager:
                 # Drop rather than grow. An unbounded queue under attack is
                 # a memory exhaustion vector in the component whose job is
                 # to prevent resource exhaustion.
-                self.stats.dropped_queue_full += 1
+                with self._lock:
+                    self.stats.dropped_queue_full += 1
                 return False
 
-            self.stats.dispatched += 1
+            with self._lock:
+                self.stats.dispatched += 1
             self._ensure_worker()
             return True
         except Exception as e:  # pragma: no cover - defensive
@@ -186,9 +193,11 @@ class AlertManager:
             for name, sink in list(self._sinks):
                 try:
                     sink(alert)
-                    self.stats.delivered += 1
+                    with self._lock:
+                        self.stats.delivered += 1
                 except Exception as e:
-                    self.stats.failed += 1
+                    with self._lock:
+                        self.stats.failed += 1
                     logger.warning(f"alert sink {name!r} failed: {e}")
 
     def flush(self, timeout: float = 2.0) -> None:

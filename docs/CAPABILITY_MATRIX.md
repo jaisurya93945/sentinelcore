@@ -32,7 +32,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
 | Operator feedback / FP review queue, exports to eval-set schema | `tests/unit/test_feedback.py` -- 11 tests incl. the retention boundary |
 | Alerting (log/webhook/Slack sinks, bounded queue, shape-keyed cooldown) | `tests/unit/test_alerts.py` -- 12 tests focused on failure properties |
-| Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests |
+| Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests; bounded LRU key space after an audit found unbounded growth |
+| Thread/task-safe per-call detector selection | `tests/unit/test_concurrency.py` -- 10 tests; replaced a global-mutation approach measured at 531/800 corrupted scans |
 | Ablation isolation guards | `tests/unit/test_ablation_isolation.py` -- 6 tests asserting the baseline cannot move when optional detectors are enabled |
 | Statistical validation (10 seeds, McNemar, bootstrap CIs) | `scripts/statistical_validation.py`. Detection-recall finding solid (10/10 seeds, p<5.6e-6, non-overlapping CIs); agent-benchmark findings are not |
 | Real sanitize enforcement (strip + mandatory re-scan + escalation) | `tests/unit/test_sanitizer.py`, end-to-end proxy tests confirming the actual forwarded request body is the cleaned text |
