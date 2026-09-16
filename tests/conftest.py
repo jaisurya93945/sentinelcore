@@ -3,18 +3,20 @@
 import pytest
 
 from sentinelcore.core.config import settings
-from sentinelcore.services.approvals import init_db as init_approvals
-from sentinelcore.services.feedback import init_db as init_feedback
-from sentinelcore.services.audit_log import init_db
+from sentinelcore.storage import reset_store
 
 
 @pytest.fixture(autouse=True)
-def _isolated_audit_db(tmp_path, monkeypatch):
-    """Every test gets its own throwaway SQLite file so audit-log tests
-    never interfere with each other, and no test run leaves a stray
-    database file in the repo."""
-    monkeypatch.setattr(settings, "audit_db_path", str(tmp_path / "test_audit.db"))
-    init_db()
-    init_approvals()
-    init_feedback()
+def _isolated_storage(tmp_path, monkeypatch):
+    """Every test gets a throwaway database.
+
+    `reset_store()` matters: the store is cached process-wide and reads its
+    configuration once, which is correct for a server but means a test
+    changing the path is otherwise ignored. Reset before AND after, so a
+    test that reconfigures the backend cannot leak into the next one.
+    """
+    monkeypatch.setattr(settings, "audit_db_path", str(tmp_path / "test.db"))
+    monkeypatch.setattr(settings, "storage_backend", "sqlite")
+    reset_store()
     yield
+    reset_store()

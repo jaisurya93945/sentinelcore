@@ -92,6 +92,8 @@ sentinel policy show balanced
 
 Command line:
 
+Storage is SQLite by default with no configuration. PostgreSQL is opt-in via `sentinelcore[postgres]` and `SENTINELCORE_STORAGE_BACKEND=postgres` — see `docs/STORAGE.md` for migrations, retention and failure semantics.
+
 ```bash
 sentinel doctor                          # what's installed
 sentinel scan "some text" --json         # exit 0 clean / 1 findings / 2 blocking

@@ -30,6 +30,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
 | Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). **RUN against a live API**: precision 97.44% recall 55.07% FPR 1.25% on the held-out split -- lower recall than the TF-IDF classifier's 72.0%. See Finding 6 |
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
+| Storage abstraction, versioned migrations, WAL SQLite, retention | `tests/unit/test_storage.py` -- 24 tests incl. legacy-schema upgrade preserving rows, 600 concurrent writes with none lost, exactly-one-decider under 10 concurrent deciders |
+| PostgreSQL backend | **IMPLEMENTED, NOT INTEGRATION-TESTED** -- 8 tests skip without `SENTINELCORE_TEST_POSTGRES_URL`; no server was reachable in the dev environment. HA is NOT claimed |
 | Operator feedback / FP review queue, exports to eval-set schema | `tests/unit/test_feedback.py` -- 11 tests incl. the retention boundary |
 | Alerting (log/webhook/Slack sinks, bounded queue, shape-keyed cooldown) | `tests/unit/test_alerts.py` -- 12 tests focused on failure properties |
 | Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests; bounded LRU key space after an audit found unbounded growth |
@@ -71,8 +73,8 @@ Conflicting-instruction detection · source trust/provenance tracking · sanitiz
 
 ## 5. Architectural Gaps
 
-- Synchronous SQLite, one connection per audit write -- untested under real concurrent load.
-- No schema migration support -- a new field requires a fresh database.
+- SQLite writes remain synchronous on the request path. Measured at 19,603 writes/sec across 8 threads with zero loss, so an async queue would add a crash-loss failure mode to save time the request does not notice.
+- ~~No schema migration support~~ -- versioned additive migrations now upgrade in place; a legacy database is adopted with its rows intact.
 - Full-text re-scan on every streamed chunk -- O(n²) over a long completion.
 - No caching of the loaded policy -- re-read from disk on every request.
 

@@ -9,6 +9,23 @@ class Settings(BaseSettings):
     upstream_timeout_seconds: float = 60.0
     audit_enabled: bool = True
     audit_db_path: str = "sentinelcore_audit.db"
+
+    # Storage backend. Explicit, never inferred. SQLite stays the default so
+    # the package works with no database to configure.
+    storage_backend: str = "sqlite"
+    postgres_url: str = ""          # never logged; redacted in health output
+    postgres_pool_min: int = 1
+    postgres_pool_max: int = 10
+
+    # Retention. Audit data cannot grow forever; the row cap is a second,
+    # independent bound because time alone cannot contain a burst inside the
+    # window.
+    retention_enabled: bool = True
+    retention_audit_days: int = 30
+    retention_feedback_days: int = 365
+    retention_approvals_days: int = 90
+    retention_max_audit_rows: int = 1_000_000
+    retention_interval_seconds: int = 3600
     # Resource protection. OFF by default: a limiter tuned wrong causes an
     # outage, so the operator opts in. Limits are PER WORKER PROCESS --
     # divide by worker count. See sentinelcore/core/limits.py.

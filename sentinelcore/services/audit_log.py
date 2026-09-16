@@ -1,87 +1,57 @@
 """
 Audit logging.
 
-Persists scan/decision METADATA only -- scan_id, timestamp, endpoint,
-risk_score, decision, an optional `detail` (a controlled identifier like
-a tool name -- never arbitrary user text), and a findings summary
-(type/severity/origin/detector). It never persists raw input/output
-text, and never persists finding `evidence` (which can contain
-matched-text fragments).
+Persists decision METADATA only -- scan_id, timestamp, endpoint, an
+optional `detail` (a controlled identifier such as a tool name, never
+arbitrary user text), risk score, decision, and a findings summary
+(type/severity/origin/detector). It never persists raw input or output
+text, and never persists finding `evidence`, which can contain
+matched-text fragments.
 
-This is a deliberate v1 boundary, not an oversight. The tempting
-alternative -- store a "redacted" text preview using the same regex
-detectors already in this codebase -- would be a false sense of safety:
-those detectors have documented gaps (no name/address detection, no
-Luhn validation, English-pattern-only prompt injection). Calling
-something "redacted" when the redaction itself is known-incomplete is
-worse than not storing it at all. See docs/threat-model/README.md.
+That boundary is deliberate. The tempting alternative -- a "redacted"
+preview built from the same regex detectors used elsewhere -- would be a
+false guarantee: those detectors have documented gaps (no name/address
+detection, no Luhn validation, English-pattern-only). Calling something
+redacted when the redaction is known-incomplete is worse than not storing
+it. See docs/threat-model/README.md.
 
-Uses synchronous sqlite3 with a fresh connection per call -- fine for a
-v1 low-throughput baseline, not tuned for real concurrent load (a real
-async driver or connection pooling would be needed for that). Logging
-failures are always swallowed, never raised: a broken audit log must
-never break an actual scan or proxy response.
+STORAGE now lives behind sentinelcore.storage, which supplies migrations,
+WAL-mode SQLite, an optional PostgreSQL backend and retention. This module
+no longer manages connections or schema.
 
-No schema migration support: `CREATE TABLE IF NOT EXISTS` does nothing
-to an already-existing table, so adding a column here requires a fresh
-database file. Accepted for v0.1 pre-release software with no real
-deployments yet -- stated plainly rather than silently glossed over.
+FAILURE SEMANTICS, unchanged and load-bearing:
+
+    SECURITY DECISION  computed in-process; never depends on storage
+    AUDIT PERSISTENCE  may fail; the failure is COUNTED and exposed via
+                       GET /api/v1/storage/health
+    NOTIFICATION       best-effort, after the durable write
+
+A failed audit write does not mean the decision failed, and does not mean
+it succeeded. It means the record is missing -- which is what gets
+reported rather than swallowed.
 """
 
-import json
 import logging
-import sqlite3
-from contextlib import contextmanager
-from datetime import datetime, timezone
 
-from sentinelcore.core.config import settings
 from sentinelcore.models.finding import Finding
+from sentinelcore.storage import QueryFilters, get_store, maybe_run_retention
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS scan_events (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    scan_id TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    endpoint TEXT NOT NULL,
-    detail TEXT,
-    risk_score INTEGER NOT NULL,
-    decision TEXT NOT NULL,
-    finding_count INTEGER NOT NULL,
-    findings_summary TEXT NOT NULL
-);
-"""
-
-
-@contextmanager
-def _connect():
-    conn = sqlite3.connect(settings.audit_db_path)
-    try:
-        yield conn
-    finally:
-        conn.close()
-
 
 def init_db() -> None:
-    if not settings.audit_enabled:
-        return
+    """Retained for backward compatibility: callers and tests still call it.
+    Initialization (including migrations) now happens on first store use."""
     try:
-        with _connect() as conn:
-            conn.execute(_SCHEMA)
-            conn.commit()
+        get_store()
     except Exception as e:
-        logger.warning(f"Audit DB init failed, audit logging will be a no-op: {e}")
+        logger.warning(f"storage initialization failed, audit logging will be a no-op: {e}")
 
 
-def log_scan_event(
-    scan_id: str,
-    endpoint: str,
-    risk_score: int,
-    decision: str,
-    findings: list[Finding],
-    detail: str | None = None,
-) -> None:
+def log_scan_event(scan_id: str, endpoint: str, risk_score: int, decision: str,
+                   findings: list[Finding], detail: str | None = None) -> None:
+    from sentinelcore.core.config import settings
+
     if not settings.audit_enabled:
         return
     try:
@@ -89,31 +59,20 @@ def log_scan_event(
             {"type": f.type, "severity": f.severity.value, "origin": f.origin, "detector": f.detector}
             for f in findings
         ]
-        with _connect() as conn:
-            conn.execute(
-                "INSERT INTO scan_events "
-                "(scan_id, timestamp, endpoint, detail, risk_score, decision, finding_count, findings_summary) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    scan_id,
-                    datetime.now(timezone.utc).isoformat(),
-                    endpoint,
-                    detail,
-                    risk_score,
-                    decision,
-                    len(findings),
-                    json.dumps(summary),
-                ),
-            )
-            conn.commit()
+        get_store().write_scan_event(scan_id, endpoint, risk_score, decision, summary, detail)
     except Exception as e:
         logger.warning(f"Audit log write failed (request was not affected): {e}")
 
-    # Alerting hangs off the audit path deliberately: every decision in the
-    # system already flows through here, so there is exactly one place to
-    # wire it and no way for a new endpoint to silently skip it. It is
-    # AFTER the durable write and cannot affect it -- the audit record is
-    # the security record; an alert is only a notification.
+    # Opportunistic cleanup, rate-limited internally. Placed after the write
+    # so a cleanup failure can never prevent the record being stored.
+    try:
+        maybe_run_retention()
+    except Exception:
+        pass
+
+    # Alerting is deliberately last: every decision already flows through
+    # this function, so there is one wiring point, and it runs after the
+    # durable write and cannot affect it.
     try:
         from sentinelcore.services.alerts import get_manager
 
@@ -122,30 +81,19 @@ def log_scan_event(
         logger.warning(f"Alert dispatch failed (request and audit unaffected): {e}")
 
 
-def get_recent_events(limit: int = 50) -> list[dict]:
+def get_recent_events(limit: int = 50, decision: str | None = None,
+                      endpoint: str | None = None, since: str | None = None,
+                      offset: int = 0) -> list[dict]:
+    """Filtering and paging are new; the default call is unchanged, so
+    existing callers keep working."""
+    from sentinelcore.core.config import settings
+
     if not settings.audit_enabled:
         return []
     try:
-        with _connect() as conn:
-            conn.row_factory = sqlite3.Row
-            rows = conn.execute(
-                "SELECT scan_id, timestamp, endpoint, detail, risk_score, decision, finding_count, findings_summary "
-                "FROM scan_events ORDER BY id DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-            return [
-                {
-                    "scan_id": r["scan_id"],
-                    "timestamp": r["timestamp"],
-                    "endpoint": r["endpoint"],
-                    "detail": r["detail"],
-                    "risk_score": r["risk_score"],
-                    "decision": r["decision"],
-                    "finding_count": r["finding_count"],
-                    "findings": json.loads(r["findings_summary"]),
-                }
-                for r in rows
-            ]
+        return get_store().recent_scan_events(
+            QueryFilters(decision=decision, endpoint=endpoint, since=since,
+                         limit=limit, offset=offset))
     except Exception as e:
         logger.warning(f"Audit log read failed: {e}")
         return []

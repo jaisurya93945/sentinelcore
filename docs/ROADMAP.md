@@ -44,7 +44,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **7. Dashboard beyond a live tail. — PARTIAL.** Feedback/FP-review backend, API and CLI export are done; the dashboard UI sections are not. Decision-rate trends, top finding types, per-tool authorization outcomes, pending approvals, false-positive review queue. The FP review queue matters most: over-defense is the failure operators actually feel, and giving them a way to see and correct it is worth more than another detector.
 
-**8. Persistence that survives production.** SQLite with no migrations, no retention, no rotation, and a synchronous connection per write. Needs schema versioning, indexes, retention policy, and a Postgres option.
+**8. Persistence that survives production. — DONE (PostgreSQL implemented, not integration-tested).** Storage abstraction with versioned migrations, WAL-mode SQLite with thread-local connections, retention with independent time and row-count bounds, defined failure semantics, and a PostgreSQL backend behind `sentinelcore[postgres]`. See `docs/STORAGE.md`. 24 persistence tests; 8 PostgreSQL integration tests exist and **skip** without a live server.
 
 ## P2 — Pre-deployment and continuous surfaces
 

@@ -28,13 +28,11 @@ retaining user input because someone clicked a button.
 
 import json
 import logging
-import sqlite3
 import uuid
-from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import Enum
 
-from sentinelcore.core.config import settings
+from sentinelcore.storage import get_store
 
 logger = logging.getLogger(__name__)
 
@@ -46,52 +44,19 @@ class Verdict(str, Enum):
     UNSURE = "unsure"
 
 
-_SCHEMA = """
-CREATE TABLE IF NOT EXISTS feedback (
-    id TEXT PRIMARY KEY,
-    scan_id TEXT NOT NULL,
-    verdict TEXT NOT NULL,
-    note TEXT,
-    submitted_by TEXT,
-    submitted_at TEXT NOT NULL,
-    text_supplied INTEGER NOT NULL DEFAULT 0,
-    text TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_feedback_verdict ON feedback(verdict);
-CREATE INDEX IF NOT EXISTS idx_feedback_scan ON feedback(scan_id);
-"""
-
-
-@contextmanager
-def _connect():
-    conn = sqlite3.connect(settings.audit_db_path)
-    try:
-        conn.row_factory = sqlite3.Row
-        yield conn
-    finally:
-        conn.close()
-
-
 def init_db() -> None:
     try:
-        with _connect() as conn:
-            conn.executescript(_SCHEMA)
-            conn.commit()
+        get_store()
     except Exception as e:
         logger.warning(f"Feedback store init failed: {e}")
 
 
 def submit(scan_id: str, verdict: Verdict, note: str = "", submitted_by: str = "") -> str | None:
+    fid = str(uuid.uuid4())
     try:
-        fid = str(uuid.uuid4())
-        with _connect() as conn:
-            conn.execute(
-                "INSERT INTO feedback (id, scan_id, verdict, note, submitted_by, submitted_at, text_supplied) "
-                "VALUES (?, ?, ?, ?, ?, ?, 0)",
-                (fid, scan_id, verdict.value, note, submitted_by, datetime.now(timezone.utc).isoformat()),
-            )
-            conn.commit()
-        return fid
+        ok = get_store().write_feedback(fid, scan_id, verdict.value, note, submitted_by,
+                                        datetime.now(timezone.utc).isoformat())
+        return fid if ok else None
     except Exception as e:
         logger.warning(f"Feedback write failed: {e}")
         return None
@@ -103,15 +68,9 @@ def add_text(feedback_id: str, text: str) -> bool:
     Separate from submit() on purpose. Storing scanned text is a retention
     decision with real consequences, and it should require a deliberate
     second action by someone who knows what the text contains -- not be a
-    side effect of clicking 'this was wrong'.
-    """
+    side effect of clicking 'this was wrong'."""
     try:
-        with _connect() as conn:
-            cur = conn.execute(
-                "UPDATE feedback SET text = ?, text_supplied = 1 WHERE id = ?", (text, feedback_id)
-            )
-            conn.commit()
-            return cur.rowcount > 0
+        return get_store().attach_feedback_text(feedback_id, text)
     except Exception as e:
         logger.warning(f"Feedback text attach failed: {e}")
         return False
@@ -119,38 +78,21 @@ def add_text(feedback_id: str, text: str) -> bool:
 
 def list_feedback(verdict: Verdict | None = None, limit: int = 100) -> list[dict]:
     try:
-        with _connect() as conn:
-            if verdict:
-                rows = conn.execute(
-                    "SELECT * FROM feedback WHERE verdict = ? ORDER BY submitted_at DESC LIMIT ?",
-                    (verdict.value, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT * FROM feedback ORDER BY submitted_at DESC LIMIT ?", (limit,)
-                ).fetchall()
-            return [dict(r) for r in rows]
+        return get_store().list_feedback(verdict.value if verdict else None, limit)
     except Exception as e:
         logger.warning(f"Feedback read failed: {e}")
         return []
 
 
 def summary() -> dict:
-    """Counts by verdict, plus the headline an operator actually wants:
-    how often are we wrong, and in which direction."""
     try:
-        with _connect() as conn:
-            rows = conn.execute("SELECT verdict, COUNT(*) c FROM feedback GROUP BY verdict").fetchall()
-        counts = {r["verdict"]: r["c"] for r in rows}
+        counts = get_store().feedback_counts()
         total = sum(counts.values())
         fp = counts.get(Verdict.FALSE_POSITIVE.value, 0)
         fn = counts.get(Verdict.FALSE_NEGATIVE.value, 0)
         return {
             "counts": counts,
             "total": total,
-            # Operator-reported, not a measured rate: only decisions someone
-            # bothered to review appear here, and reviewers are far likelier
-            # to report a block that annoyed them than an allow that did not.
             "reported_false_positive_share": round(fp / total, 4) if total else None,
             "reported_false_negative_share": round(fn / total, 4) if total else None,
             "caveat": (
@@ -170,8 +112,7 @@ def export_hard_negatives(path: str) -> int:
 
     Records without supplied text are skipped and counted, because a case
     with no text cannot be replayed and shipping it would pad the corpus
-    with rows that look like data and are not.
-    """
+    with rows that look like data and are not."""
     rows = [r for r in list_feedback(Verdict.FALSE_POSITIVE, limit=10000) if r.get("text")]
     with open(path, "w", encoding="utf-8") as f:
         for r in rows:

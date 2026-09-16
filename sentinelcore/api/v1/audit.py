@@ -6,12 +6,36 @@ sentinelcore/services/audit_log.py for exactly what is and isn't stored (no raw
 text, ever).
 """
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from sentinelcore.core.auth import Role, require_role
 from sentinelcore.services.audit_log import get_recent_events
 
 router = APIRouter(dependencies=[Depends(require_role(Role.VIEWER))])
+
+
+@router.get("/storage/health", dependencies=[Depends(require_role(Role.VIEWER))])
+def storage_status():
+    """Backend, schema version, reachability and failure counters.
+
+    Never raises: an operator asking "is the audit log working?" must get an
+    answer precisely when it is not. Connection strings are redacted by the
+    backend before they reach this response."""
+    from sentinelcore.storage import storage_health
+
+    return storage_health()
+
+
+@router.post("/storage/retention/run", dependencies=[Depends(require_role(Role.ADMIN))])
+def run_retention():
+    """Force a retention pass. Admin-only: it deletes data."""
+    from sentinelcore.storage import current_policy, get_store
+
+    try:
+        return {"deleted": get_store().apply_retention(current_policy()),
+                "policy": current_policy().__dict__}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"storage unavailable: {type(e).__name__}")
 
 
 @router.get("/alerts/status", dependencies=[Depends(require_role(Role.VIEWER))])
