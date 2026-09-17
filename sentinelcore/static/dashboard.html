@@ -1,308 +1,123 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SentinelCore — Audit Recorder</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SentinelCore</title>
 <style>
   :root {
-    --bg: #0a0e1a;
-    --bg-elevated: #12172a;
-    --bg-elevated-2: #171d36;
-    --border: #232b4a;
-    --indigo: #6366f1;
-    --cyan: #22d3ee;
-    --text: #e4e7f1;
-    --text-dim: #8b92b0;
-    --text-faint: #545c7a;
-
-    --c-allow: #34d399;
-    --c-warn: #facc15;
-    --c-sanitize: #a78bfa;
-    --c-human_approval: #fb923c;
-    --c-block: #f43f5e;
-
-    --c-allow-tint: rgba(52,211,153,0.12);
-    --c-warn-tint: rgba(250,204,21,0.12);
-    --c-sanitize-tint: rgba(167,139,250,0.12);
-    --c-human_approval-tint: rgba(251,146,60,0.12);
-    --c-block-tint: rgba(244,63,94,0.12);
+    --bg:#0d1117; --panel:#161b22; --line:#21262d; --fg:#e6edf3; --dim:#7d8590;
+    --c-allow:#3fb950; --c-warn:#d29922; --c-sanitize:#58a6ff;
+    --c-human_approval:#bc8cff; --c-block:#f85149;
+    --c-critical:#f85149; --c-high:#f85149; --c-medium:#d29922;
+    --c-low:#58a6ff; --c-info:#7d8590;
   }
-
-  * { box-sizing: border-box; }
-
-  body {
-    margin: 0;
-    background: var(--bg);
-    background-image:
-      radial-gradient(ellipse 900px 500px at 15% -10%, rgba(99,102,241,0.12), transparent),
-      radial-gradient(ellipse 700px 400px at 100% 0%, rgba(34,211,238,0.08), transparent);
-    color: var(--text);
-    font-family: 'IBM Plex Mono', monospace;
-    min-height: 100vh;
-  }
-
-  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
-
-  header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 6px; flex-wrap: wrap; gap: 8px; }
-
-  h1 {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700;
-    font-size: 22px;
-    letter-spacing: -0.01em;
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  h1 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cyan); box-shadow: 0 0 12px var(--cyan); }
-
-  .subtitle { color: var(--text-dim); font-size: 12.5px; margin: 0 0 32px; }
-
-  .live-tag {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    color: var(--cyan);
-    border: 1px solid rgba(34,211,238,0.35);
-    background: rgba(34,211,238,0.06);
-    padding: 3px 9px;
-    border-radius: 20px;
-    letter-spacing: 0.04em;
-  }
-
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 1px;
-    background: var(--border);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-bottom: 28px;
-  }
-  .stat {
-    background: var(--bg-elevated);
-    padding: 16px 14px;
-    text-align: left;
-  }
-  .stat-num {
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 26px;
-    font-weight: 700;
-    line-height: 1;
-  }
-  .stat-label {
-    font-size: 10.5px;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--text-dim);
-    margin-top: 6px;
-  }
-  .stat[data-k="allow"] .stat-num { color: var(--c-allow); }
-  .stat[data-k="warn"] .stat-num { color: var(--c-warn); }
-  .stat[data-k="sanitize"] .stat-num { color: var(--c-sanitize); }
-  .stat[data-k="human_approval"] .stat-num { color: var(--c-human_approval); }
-  .stat[data-k="block"] .stat-num { color: var(--c-block); }
-
-  .panel-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--text-faint);
-    margin: 0 0 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .panel-label::after { content: ""; height: 1px; flex: 1; background: var(--border); }
-
-  .empty {
-    border: 1px dashed var(--border);
-    border-radius: 10px;
-    padding: 40px 24px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 13px;
-    line-height: 1.7;
-  }
-  .empty code {
-    background: var(--bg-elevated-2);
-    padding: 2px 6px;
-    border-radius: 4px;
-    color: var(--cyan);
-    font-size: 12px;
-  }
-
-  .log { display: flex; flex-direction: column; gap: 1px; }
-
-  .entry {
-    display: grid;
-    grid-template-columns: 108px 90px 1fr 130px 56px;
-    align-items: center;
-    gap: 16px;
-    background: var(--bg-elevated);
-    border-left: 3px solid var(--text-faint);
-    padding: 11px 16px;
-    font-size: 12.5px;
-    animation: rise 0.35s ease both;
-  }
-  .entry[data-d="allow"] { border-left-color: var(--c-allow); }
-  .entry[data-d="warn"] { border-left-color: var(--c-warn); }
-  .entry[data-d="sanitize"] { border-left-color: var(--c-sanitize); }
-  .entry[data-d="human_approval"] { border-left-color: var(--c-human_approval); }
-  .entry[data-d="block"] { border-left-color: var(--c-block); }
-
-  @keyframes rise { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-
-  .t-time { color: var(--text-faint); font-size: 11.5px; }
-  .t-endpoint { color: var(--text-dim); font-size: 11px; }
-  .t-findings { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .t-findings .type { color: var(--text); }
-  .t-findings .none { color: var(--text-faint); font-style: italic; }
-
-  .t-decision {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 600;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    justify-self: start;
-  }
-  .t-decision[data-d="allow"] { color: var(--c-allow); }
-  .t-decision[data-d="warn"] { color: var(--c-warn); }
-  .t-decision[data-d="sanitize"] { color: var(--c-sanitize); }
-  .t-decision[data-d="human_approval"] { color: var(--c-human_approval); }
-  .t-decision[data-d="block"] { color: var(--c-block); }
-
-  .t-risk { justify-self: end; }
-  .risk-chip {
-    font-family: 'Space Grotesk', sans-serif;
-    font-weight: 700;
-    font-size: 12px;
-    padding: 3px 9px;
-    border-radius: 5px;
-    min-width: 26px;
-    text-align: center;
-  }
-
-  footer { margin-top: 32px; color: var(--text-faint); font-size: 11px; line-height: 1.8; }
-  footer a { color: var(--text-dim); }
-
-  @media (max-width: 760px) {
-    .stats { grid-template-columns: repeat(2, 1fr); }
-    .entry { grid-template-columns: 1fr; gap: 4px; text-align: left; }
-    .t-risk, .t-decision { justify-self: start; }
-  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  header { display:flex; align-items:center; gap:14px; padding:14px 20px;
+           border-bottom:1px solid var(--line); background:var(--panel); flex-wrap:wrap; }
+  .brand { font-weight:600; letter-spacing:.3px; }
+  .brand span { color:var(--dim); font-weight:400; margin-left:8px; }
+  header input { background:var(--bg); border:1px solid var(--line); color:var(--fg);
+                 padding:5px 9px; border-radius:6px; font:inherit; width:190px; }
+  header .spacer { flex:1; }
+  button { font:inherit; cursor:pointer; }
+  .tabs { display:flex; gap:2px; padding:0 20px; border-bottom:1px solid var(--line);
+          background:var(--panel); overflow-x:auto; }
+  .tab { background:none; border:none; color:var(--dim); padding:10px 14px;
+         border-bottom:2px solid transparent; white-space:nowrap; }
+  .tab.active { color:var(--fg); border-bottom-color:var(--c-sanitize); }
+  .tab:hover { color:var(--fg); }
+  #pause { background:var(--bg); border:1px solid var(--line); color:var(--dim);
+           padding:5px 11px; border-radius:6px; }
+  #pause.paused { color:var(--c-warn); border-color:var(--c-warn); }
+  main { padding:18px 20px 40px; max-width:1180px; }
+  .stats { display:flex; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:9px 14px; min-width:92px; }
+  .stat .n { display:block; font-size:19px; font-weight:600; }
+  .stat .l { color:var(--dim); font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
+  .stat[data-d=allow] .n { color:var(--c-allow); }
+  .stat[data-d=warn] .n { color:var(--c-warn); }
+  .stat[data-d=sanitize] .n { color:var(--c-sanitize); }
+  .stat[data-d=human_approval] .n { color:var(--c-human_approval); }
+  .stat[data-d=block] .n { color:var(--c-block); }
+  .list { display:flex; flex-direction:column; gap:1px; }
+  .row { display:grid; grid-template-columns:78px 104px 46px 128px 1fr auto;
+         gap:10px; align-items:center; padding:7px 10px; background:var(--panel);
+         border-left:2px solid var(--line); }
+  .row[data-d=allow]{border-left-color:var(--c-allow)}
+  .row[data-d=warn]{border-left-color:var(--c-warn)}
+  .row[data-d=sanitize]{border-left-color:var(--c-sanitize)}
+  .row[data-d=human_approval]{border-left-color:var(--c-human_approval)}
+  .row[data-d=block]{border-left-color:var(--c-block)}
+  .time,.endpoint,.risk { color:var(--dim); }
+  .decision { text-transform:uppercase; font-size:11px; letter-spacing:.4px; }
+  .row[data-d=block] .decision { color:var(--c-block); }
+  .row[data-d=human_approval] .decision { color:var(--c-human_approval); }
+  .row[data-d=sanitize] .decision { color:var(--c-sanitize); }
+  .row[data-d=warn] .decision { color:var(--c-warn); }
+  .row[data-d=allow] .decision { color:var(--c-allow); }
+  .chip { background:var(--bg); border:1px solid var(--line); border-radius:4px;
+          padding:1px 6px; margin-right:5px; font-size:11px; }
+  .chip.ok { color:var(--c-allow); border-color:var(--c-allow); }
+  .chip.err { color:var(--c-block); border-color:var(--c-block); }
+  .more,.none,.hint { color:var(--dim); font-size:11px; }
+  .link { background:none; border:none; color:var(--dim); text-decoration:underline; padding:0; }
+  .link:hover { color:var(--c-sanitize); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px;
+          padding:13px 15px; }
+  .card[data-sev=high]{border-left:3px solid var(--c-high)}
+  .card[data-sev=medium]{border-left:3px solid var(--c-medium)}
+  .card[data-sev=info]{border-left:3px solid var(--c-info)}
+  .card-head { display:flex; align-items:center; gap:9px; margin-bottom:5px; }
+  .sev { font-size:10px; text-transform:uppercase; letter-spacing:.6px;
+         padding:1px 6px; border-radius:4px; background:var(--bg); }
+  .meta { color:var(--dim); font-size:11px; }
+  .card p { margin:8px 0 0; }
+  .actions { display:flex; align-items:center; gap:9px; margin-top:11px; flex-wrap:wrap; }
+  .btn { background:var(--bg); border:1px solid var(--line); color:var(--fg);
+         padding:5px 13px; border-radius:6px; }
+  .btn.ok:hover { border-color:var(--c-allow); color:var(--c-allow); }
+  .btn.danger:hover { border-color:var(--c-block); color:var(--c-block); }
+  .empty { text-align:center; padding:44px 20px; color:var(--dim); }
+  .empty p { margin:5px 0; }
+  .warn-note { color:var(--c-warn); }
+  .notice { position:fixed; bottom:0; left:0; right:0; padding:11px 20px;
+            transform:translateY(100%); transition:transform .18s; background:var(--panel);
+            border-top:1px solid var(--line); }
+  .notice.show { transform:translateY(0); }
+  .notice.ok { border-top-color:var(--c-allow); }
+  .notice.warn { border-top-color:var(--c-warn); }
+  .notice.err { border-top-color:var(--c-block); }
+  footer { padding:14px 20px 26px; color:var(--dim); font-size:11px; max-width:1180px; }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <h1><span class="dot"></span>SentinelCore <span style="color:var(--text-faint); font-weight:500;">/ audit recorder</span></h1>
-    <span class="live-tag">● LIVE</span>
-  </header>
-  <p class="subtitle">Read-only transcript of every scan decision. Metadata only — no raw text, no finding evidence, ever recorded.</p>
+<header>
+  <div class="brand">SentinelCore<span>control plane</span></div>
+  <div class="spacer"></div>
+  <input id="apikey" type="password" placeholder="X-API-Key (if enabled)" autocomplete="off">
+  <button id="pause">Pause</button>
+</header>
 
-  <div class="stats" id="stats"></div>
+<nav class="tabs">
+  <button class="tab active" data-tab="activity">Activity</button>
+  <button class="tab" data-tab="approvals">Approvals</button>
+  <button class="tab" data-tab="mcp">MCP changes</button>
+  <button class="tab" data-tab="health">Health</button>
+</nav>
 
-  <p class="panel-label">Recent activity</p>
-  <div id="log-container"></div>
+<main><div id="panel"></div></main>
 
-  <footer>
-    Polls <code style="font-size:10px;">GET /api/v1/audit/recent</code> every 5s · v0.3.0 · <a href="/docs">API docs</a>
-  </footer>
-</div>
+<footer>
+  Read-only except for approval decisions, change acknowledgement and feedback.
+  Reporting a decision as wrong records the scan id and a verdict &mdash; never the scanned text.
+  Attaching text is a separate, admin-only action.
+</footer>
 
-<script>
-const DECISIONS = ["allow", "warn", "sanitize", "human_approval", "block"];
-const LABELS = { allow: "Allow", warn: "Warn", sanitize: "Sanitize", human_approval: "Human", block: "Block" };
-
-function fmtTime(iso) {
-  const d = new Date(iso);
-  return d.toLocaleTimeString('en-US', { hour12: false }) ;
-}
-
-function renderStats(events) {
-  const counts = Object.fromEntries(DECISIONS.map(d => [d, 0]));
-  events.forEach(e => { if (counts[e.decision] !== undefined) counts[e.decision]++; });
-  document.getElementById('stats').innerHTML = DECISIONS.map(d => `
-    <div class="stat" data-k="${d}">
-      <div class="stat-num">${counts[d]}</div>
-      <div class="stat-label">${LABELS[d]}</div>
-    </div>
-  `).join('');
-}
-
-function renderLog(events) {
-  const container = document.getElementById('log-container');
-  if (events.length === 0) {
-    container.innerHTML = `<div class="empty">
-      No scans recorded yet.<br><br>
-      Send a request to <code>POST /api/v1/scan</code>, <code>POST /v1/chat/completions</code>,
-      <code>POST /api/v1/scan/tool-call</code>, or <code>POST /api/v1/scan/mcp-tools</code> to see activity here.
-    </div>`;
-    return;
-  }
-  container.innerHTML = `<div class="log">` + events.map(e => {
-    let findingsText;
-    if (e.findings.length) {
-      findingsText = e.findings.slice(0, 3).map(f => `<span class="type">${f.type}</span>`).join(', ') + (e.findings.length > 3 ? ` +${e.findings.length - 3} more` : '');
-    } else if (e.detail) {
-      findingsText = `<span class="none">${e.detail} — no content findings</span>`;
-    } else {
-      findingsText = '<span class="none">no findings</span>';
-    }
-    const riskColor = `var(--c-${e.decision})`;
-    const riskTint = `var(--c-${e.decision}-tint)`;
-    return `
-      <div class="entry" data-d="${e.decision}">
-        <span class="t-time">${fmtTime(e.timestamp)}</span>
-        <span class="t-endpoint">${e.endpoint}${e.detail ? ' · ' + e.detail : ''}</span>
-        <span class="t-findings">${findingsText}</span>
-        <span class="t-decision" data-d="${e.decision}">${LABELS[e.decision] || e.decision}</span>
-        <span class="t-risk"><span class="risk-chip" style="color:${riskColor}; background:${riskTint}; border:1px solid ${riskColor};">${e.risk_score}</span></span>
-      </div>`;
-  }).join('') + `</div>`;
-}
-
-let apiKey = null;  // in-memory only for this page load -- never persisted (no localStorage/sessionStorage), by design for a security tool
-
-async function refresh() {
-  try {
-    const headers = apiKey ? { 'X-API-Key': apiKey } : {};
-    let res = await fetch('/api/v1/audit/recent?limit=30', { headers });
-
-    if (res.status === 401) {
-      apiKey = window.prompt('SentinelCore auth is enabled. Enter an API key (viewer role or higher):');
-      if (!apiKey) {
-        document.getElementById('log-container').innerHTML =
-          `<div class="empty">No API key provided. Auth is enabled on this deployment -- reload to try again.</div>`;
-        return;
-      }
-      res = await fetch('/api/v1/audit/recent?limit=30', { headers: { 'X-API-Key': apiKey } });
-    }
-
-    if (res.status === 401 || res.status === 403) {
-      apiKey = null;
-      document.getElementById('log-container').innerHTML =
-        `<div class="empty">Access denied (${res.status}). Check the key's role and try reloading.</div>`;
-      return;
-    }
-
-    const data = await res.json();
-    renderStats(data.events);
-    renderLog(data.events);
-  } catch (err) {
-    document.getElementById('log-container').innerHTML =
-      `<div class="empty">Could not reach the audit API. Is the server running?</div>`;
-  }
-}
-
-refresh();
-setInterval(refresh, 5000);
-</script>
+<div id="notice" class="notice"></div>
+<script src="/static/dashboard.js"></script>
 </body>
 </html>

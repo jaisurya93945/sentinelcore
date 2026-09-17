@@ -46,7 +46,7 @@ Documentation = "https://github.com/jaisurya93945/sentinelcore/tree/main/docs"
 include = ["sentinelcore*"]
 
 [tool.setuptools.package-data]
-sentinelcore = ["services/*.yaml", "static/*.html", "py.typed"]
+sentinelcore = ["services/*.yaml", "static/*.html", "static/*.js", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -360,6 +360,22 @@ Reporting is **viewer**-level while retention is **admin**-level. The people who
 
 `GET /api/v1/feedback/summary` returns a reported-false-positive share **and a caveat stating it is selection-biased and not comparable to a measured FPR**. Only reviewed decisions appear, and a wrongful block is far more likely to be reported than a wrongful allow. A dashboard number without that warning attached would be quoted as an FPR within a week.
 
+## Fixed: stored XSS in the dashboard
+
+**Severity: high. Present in shipped code, found by audit.**
+
+The dashboard interpolated audit fields into `innerHTML` without escaping. One of those fields, `detail`, is the **tool name from `POST /api/v1/scan/tool-call`** — attacker-controlled. Any caller who could reach that endpoint could store markup that executed in the browser of the admin viewing the dashboard, **a page that holds an API key**.
+
+Verified exploitable end-to-end before fixing: the payload was accepted, stored verbatim, and would have been rendered as markup.
+
+Three independent layers now:
+
+1. **Structural.** All untrusted values are built with `createElement`/`createTextNode`. A test parses `dashboard.js` (stripping comments) and fails on any `innerHTML =`, `insertAdjacentHTML`, `outerHTML =` or `document.write`.
+2. **Transport.** A strict CSP: `script-src 'self'` with no `'unsafe-inline'`, plus `frame-ancestors 'none'`, `X-Frame-Options: DENY`, `nosniff`, `Referrer-Policy: no-referrer`, `Cache-Control: no-store` (a shared cache holding security decisions would leak one tenant's activity to another).
+3. **Structural again.** The script is served from `/static/dashboard.js` rather than inlined. An inline `<script>` would force `script-src` to permit `'unsafe-inline'`, which is exactly what defeats CSP as an XSS control — so splitting the file is what makes the policy meaningful.
+
+An end-to-end test stores a hostile tool name and asserts it does not appear in the dashboard response.
+
 ## Not yet implemented
 
 See the Current Status table in `README.md` and `docs/CAPABILITY_MATRIX.md` for the full list: rate limiting, conflicting-instruction detection, source trust/provenance tracking, origin-aware policy, enterprise/multi-tenant scale, HUMAN_APPROVAL enforcement, sanitize enforcement for streaming/tool-call/MCP paths.

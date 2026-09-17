@@ -30,6 +30,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
 | Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). **RUN against a live API**: precision 97.44% recall 55.07% FPR 1.25% on the held-out split -- lower recall than the TF-IDF classifier's 72.0%. See Finding 6 |
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
+| Operator dashboard (4 tabs, action surfaces for approvals/MCP/feedback) | `tests/unit/test_dashboard.py` -- 12 tests incl. XSS regression, CSP enforcement, and a check that every subsystem is reachable |
 | MCP definition pinning / rug-pull detection | `tests/unit/test_mcp_pinning.py` -- 22 tests. Found and fixed a bug where an unpinned server reported every tool as changed |
 | Pre-deployment assessment (`sentinel assess`) | `tests/unit/test_assess.py` -- 23 tests. Found and fixed a word-boundary bug that missed snake_case tool names, the dominant convention |
 | Storage abstraction, versioned migrations, WAL SQLite, retention | `tests/unit/test_storage.py` -- 24 tests incl. legacy-schema upgrade preserving rows, 600 concurrent writes with none lost, exactly-one-decider under 10 concurrent deciders |
