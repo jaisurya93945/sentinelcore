@@ -308,6 +308,81 @@ class SQLiteStore(Store):
         except Exception:
             return {}
 
+    # -- mcp pinning ---------------------------------------------------
+
+    def upsert_mcp_pin(self, pin_id, server, tool_name, fingerprint, definition, now_iso) -> bool:
+        try:
+            # ON CONFLICT keeps first_seen from the original pin: when the
+            # baseline was first established is the interesting fact, and
+            # overwriting it would erase how long a tool has been trusted.
+            self._conn().execute(
+                "INSERT INTO mcp_pins (id, server, tool_name, fingerprint, definition, "
+                "first_seen, last_verified, status) VALUES (?,?,?,?,?,?,?,'pinned') "
+                "ON CONFLICT(server, tool_name) DO UPDATE SET "
+                "fingerprint=excluded.fingerprint, definition=excluded.definition, "
+                "last_verified=excluded.last_verified",
+                (pin_id, server, tool_name, fingerprint, definition, now_iso, now_iso))
+            self.stats.writes += 1
+            return True
+        except Exception as e:
+            self.stats.write_failures += 1
+            logger.warning(f"mcp pin write failed: {e}")
+            return False
+
+    def list_mcp_pins(self, server=None) -> list[dict]:
+        try:
+            conn = self._conn()
+            if server:
+                rows = conn.execute("SELECT * FROM mcp_pins WHERE server = ? ORDER BY tool_name",
+                                    (server,)).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM mcp_pins ORDER BY server, tool_name").fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.warning(f"mcp pin read failed: {e}")
+            return []
+
+    def record_mcp_change(self, change_id, **ch) -> bool:
+        try:
+            self._conn().execute(
+                "INSERT INTO mcp_changes (id, server, tool_name, change_type, severity, "
+                "detected_at, old_fingerprint, new_fingerprint, summary, acknowledged) "
+                "VALUES (?,?,?,?,?,?,?,?,?,0)",
+                (change_id, ch["server"], ch["tool_name"], ch["change_type"], ch["severity"],
+                 ch["detected_at"], ch.get("old_fingerprint"), ch.get("new_fingerprint"),
+                 ch["summary"]))
+            self.stats.writes += 1
+            return True
+        except Exception as e:
+            self.stats.write_failures += 1
+            logger.warning(f"mcp change write failed: {e}")
+            return False
+
+    def list_mcp_changes(self, acknowledged=None, limit=100) -> list[dict]:
+        try:
+            conn = self._conn()
+            if acknowledged is None:
+                rows = conn.execute("SELECT * FROM mcp_changes ORDER BY detected_at DESC LIMIT ?",
+                                    (limit,)).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM mcp_changes WHERE acknowledged = ? ORDER BY detected_at DESC "
+                    "LIMIT ?", (1 if acknowledged else 0, limit)).fetchall()
+            return [dict(r) for r in rows]
+        except Exception as e:
+            logger.warning(f"mcp change read failed: {e}")
+            return []
+
+    def acknowledge_mcp_change(self, change_id) -> bool:
+        try:
+            cur = self._conn().execute(
+                "UPDATE mcp_changes SET acknowledged = 1 WHERE id = ? AND acknowledged = 0",
+                (change_id,))
+            return cur.rowcount > 0
+        except Exception as e:
+            logger.warning(f"mcp change acknowledge failed: {e}")
+            return False
+
     # -- retention -----------------------------------------------------
 
     def apply_retention(self, policy: RetentionPolicy) -> dict[str, int]:

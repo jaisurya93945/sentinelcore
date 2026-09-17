@@ -22,7 +22,7 @@ just as real an attack surface as a poisoned top-level one.
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from sentinelcore.core.auth import Role, require_role
 from sentinelcore.detectors.registry import get_registered_detectors
@@ -58,6 +58,88 @@ def _scan_text(text: str, origin: str) -> list[Finding]:
             f.origin = origin
         findings.extend(detected)
     return findings
+
+
+class MCPPinRequest(MCPToolScanRequest):
+    server: str
+
+
+@router.post("/mcp/pin", dependencies=[Depends(require_role(Role.ADMIN))])
+def pin(payload: MCPPinRequest):
+    """Establish or refresh a server's baseline.
+
+    ADMIN, not operator: re-pinning after a detected change is how an
+    operator says "I reviewed this and accept it". Making it available to
+    the role that merely observes would let a change be silently blessed by
+    whoever noticed it."""
+    from sentinelcore.services.mcp_pinning import pin_tools
+
+    return pin_tools(payload.server, [t.model_dump() for t in payload.tools])
+
+
+@router.post("/mcp/check", dependencies=[Depends(require_role(Role.OPERATOR))])
+def check(payload: MCPPinRequest):
+    """Compare an observed tool list against the baseline.
+
+    Detected changes are recorded and alerted. The response carries the
+    trust-on-first-use limitation explicitly -- a caller must not read
+    'clean' as 'this server is safe'."""
+    from sentinelcore.services.mcp_pinning import check_tools
+
+    result = check_tools(payload.server, [t.model_dump() for t in payload.tools])
+
+    # A definition change is exactly the kind of event nobody is watching a
+    # dashboard for. Route it through the existing alert path.
+    if result["changes"]:
+        from sentinelcore.services.alerts import Alert, get_manager
+
+        mgr = get_manager()
+        worst = "high" if any(c["severity"] == "high" for c in result["changes"]) else "medium"
+        alert = Alert(
+            timestamp=result["changes"][0]["detected_at"],
+            scan_id=f"mcp-{payload.server}",
+            endpoint="mcp_pin_check",
+            decision="block" if worst == "high" else "warn",
+            risk_score=90 if worst == "high" else 50,
+            finding_types=sorted({c["change_type"] for c in result["changes"]}),
+            detail=payload.server,
+        )
+        try:
+            mgr._queue.put_nowait(alert)
+            mgr._ensure_worker()
+            with mgr._lock:
+                mgr.stats.dispatched += 1
+        except Exception:
+            pass
+    return result
+
+
+@router.get("/mcp/pins", dependencies=[Depends(require_role(Role.VIEWER))])
+def pins(server: str | None = None):
+    from sentinelcore.services.mcp_pinning import get_store
+
+    return {"pins": get_store().list_mcp_pins(server)}
+
+
+@router.get("/mcp/changes", dependencies=[Depends(require_role(Role.VIEWER))])
+def changes(unacknowledged_only: bool = True, limit: int = 100):
+    from sentinelcore.services.mcp_pinning import get_store
+
+    return {"changes": get_store().list_mcp_changes(
+        acknowledged=False if unacknowledged_only else None, limit=limit)}
+
+
+@router.post("/mcp/changes/{change_id}/acknowledge",
+             dependencies=[Depends(require_role(Role.ADMIN))])
+def acknowledge(change_id: str):
+    """Marks a change reviewed. Deliberately does NOT re-pin: accepting that
+    a change happened is a different decision from trusting the new
+    definition, and conflating them would turn review into approval."""
+    from sentinelcore.services.mcp_pinning import acknowledge as ack
+
+    if not ack(change_id):
+        raise HTTPException(status_code=404, detail="No such unacknowledged change.")
+    return {"id": change_id, "acknowledged": True}
 
 
 @router.post("/scan/mcp-tools", response_model=MCPToolScanResult)

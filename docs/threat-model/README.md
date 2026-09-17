@@ -140,6 +140,10 @@ Three patterns added specifically for this: fake authority tags (`<IMPORTANT>`, 
 - No tool name impersonation detection.
 - No live MCP server connection -- scans definitions you provide, doesn't connect to a server itself.
 
+### Rug-pull detection (added)
+
+A server benign at review time can change its tool descriptions afterwards. `sentinelcore/services/mcp_pinning.py` fingerprints each definition over a canonical form and reports changes: description and schema changes are HIGH, additions MEDIUM, removals INFO. **Trust on first use is the limitation and it is returned in every response** -- a server already poisoned when pinned becomes the trusted baseline. Detects change, not badness; pair it with content scanning.
+
 ## Implemented: Audit Logging
 
 **Module:** `sentinelcore/services/audit_log.py`, queryable via `GET /api/v1/audit/recent`

@@ -34,6 +34,11 @@ def main(argv: list[str] | None = None) -> int:
     ass.add_argument("--no-limitations", action="store_true",
                      help="omit the 'what this cannot see' section (not recommended)")
 
+    mcp = sub.add_parser("mcp", parents=[common], help="MCP definition pinning and change detection")
+    mcp.add_argument("action", choices=["pin", "check", "pins", "changes"])
+    mcp.add_argument("--server", required=False, help="server name (required for pin/check)")
+    mcp.add_argument("--file", required=False, help="JSON file containing a tools list")
+
     exp = sub.add_parser("export-feedback", parents=[common], help="export operator-reported false positives as benchmark cases")
     exp.add_argument("--out", default="hard_negatives.jsonl")
 
@@ -57,6 +62,62 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return _doctor(args.json)
+
+    if args.command == "mcp":
+        from sentinelcore.services import mcp_pinning as mp
+
+        if args.action in ("pin", "check"):
+            if not args.server or not args.file:
+                print("error: --server and --file are required for pin/check", file=sys.stderr)
+                return 3
+            try:
+                raw = json.loads(open(args.file, encoding="utf-8").read())
+            except (OSError, json.JSONDecodeError) as e:
+                print(f"error: could not read {args.file}: {e}", file=sys.stderr)
+                return 3
+            tools = raw.get("tools", raw) if isinstance(raw, dict) else raw
+            if not isinstance(tools, list):
+                print("error: expected a tools list or an object with a 'tools' key", file=sys.stderr)
+                return 3
+
+            if args.action == "pin":
+                result = mp.pin_tools(args.server, tools)
+                print(json.dumps(result, indent=2) if args.json
+                      else f"pinned {result['count']} tool(s) for '{args.server}': "
+                           f"{', '.join(result['pinned'])}")
+                return 0
+
+            result = mp.check_tools(args.server, tools)
+            if args.json:
+                print(json.dumps(result, indent=2))
+            else:
+                print(f"server: {result['server']}   pinned: {result['pinned_tools']}   "
+                      f"observed: {result['observed_tools']}   status: {result['status']}")
+                for ch in result["changes"]:
+                    print(f"  [{ch['severity'].upper()}] {ch['change_type']}: {ch['summary']}")
+                if result["status"] == "unpinned":
+                    print("  no baseline exists -- run 'sentinel mcp pin' first")
+                print(f"\n  limitation: {result['limitation']}")
+            if any(c["severity"] == "high" for c in result["changes"]):
+                return 2
+            return 1 if result["changes"] else 0
+
+        if args.action == "pins":
+            pins = mp.get_store().list_mcp_pins(args.server)
+            print(json.dumps(pins, indent=2) if args.json else
+                  "\n".join(f"{p['server']:<20} {p['tool_name']:<24} {p['fingerprint'][:12]}  "
+                            f"first seen {p['first_seen'][:10]}" for p in pins) or "no pins")
+            return 0
+
+        changes = mp.unacknowledged_changes()
+        if args.json:
+            print(json.dumps(changes, indent=2))
+        else:
+            for ch in changes:
+                print(f"[{ch['severity'].upper()}] {ch['server']}/{ch['tool_name']}: {ch['summary']}")
+            if not changes:
+                print("no unacknowledged changes")
+        return 2 if any(c["severity"] == "high" for c in changes) else 0
 
     if args.command == "assess":
         from pathlib import Path

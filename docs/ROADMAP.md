@@ -50,7 +50,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **9. Pre-deployment assessment. — DONE.** `sentinel assess .` over a codebase: hardcoded credentials, MCP server and tool definitions (including nested schema properties), consequential tools declared without an authorization rule, and SentinelCore's own configuration. CI-usable exit codes, JSON output, inline `sentinel:ignore` suppression that is counted rather than silent, and every check declaring what it cannot see. See `docs/ASSESSMENT.md`. 23 tests.
 
-**10. Continuous monitoring.** Scheduled re-scan of MCP tool definitions with fingerprint pinning and change detection — a trusted tool whose description silently changes is a real, documented attack (rug-pull) and the current MCP scanning is one-shot.
+**10. Continuous monitoring. — DONE (polling is manual).** Fingerprint pinning with change detection for MCP tool definitions: `sentinel mcp pin/check/changes`, API endpoints, durable change history (schema v3), alert integration, CI exit codes. Scheduled polling is **PLANNED** — this package has no scheduler, so run `sentinel mcp check` from cron or CI. See `docs/MCP_PINNING.md`.
 
 **11. Multi-agent / multi-tenant.** Only after an identity model exists. Building tenant isolation without one produces unsafe partial isolation, which is worse than none.
 

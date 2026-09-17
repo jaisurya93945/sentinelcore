@@ -134,6 +134,25 @@ class Store(ABC):
     @abstractmethod
     def feedback_counts(self) -> dict[str, int]: ...
 
+    # -- mcp pinning ---------------------------------------------------
+    @abstractmethod
+    def upsert_mcp_pin(self, pin_id: str, server: str, tool_name: str,
+                       fingerprint: str, definition: str, now_iso: str) -> bool:
+        """Establishes or refreshes one tool's baseline. Must be an upsert on
+        (server, tool_name) so re-pinning replaces rather than duplicates."""
+
+    @abstractmethod
+    def list_mcp_pins(self, server: str | None = None) -> list[dict]: ...
+
+    @abstractmethod
+    def record_mcp_change(self, change_id: str, **change) -> bool: ...
+
+    @abstractmethod
+    def list_mcp_changes(self, acknowledged: bool | None = None, limit: int = 100) -> list[dict]: ...
+
+    @abstractmethod
+    def acknowledge_mcp_change(self, change_id: str) -> bool: ...
+
     # -- retention -----------------------------------------------------
     @abstractmethod
     def apply_retention(self, policy: RetentionPolicy) -> dict[str, int]:

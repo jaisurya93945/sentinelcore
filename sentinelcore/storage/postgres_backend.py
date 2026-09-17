@@ -322,6 +322,71 @@ class PostgresStore(Store):
         except Exception:
             return {}
 
+    # -- mcp pinning ---------------------------------------------------
+
+    def upsert_mcp_pin(self, pin_id, server, tool_name, fingerprint, definition, now_iso) -> bool:
+        try:
+            self._exec(
+                "INSERT INTO mcp_pins (id, server, tool_name, fingerprint, definition, "
+                "first_seen, last_verified, status) VALUES (%s,%s,%s,%s,%s,%s,%s,'pinned') "
+                "ON CONFLICT (server, tool_name) DO UPDATE SET "
+                "fingerprint=EXCLUDED.fingerprint, definition=EXCLUDED.definition, "
+                "last_verified=EXCLUDED.last_verified",
+                (pin_id, server, tool_name, fingerprint, definition, now_iso, now_iso))
+            self.stats.writes += 1
+            return True
+        except Exception:
+            self.stats.write_failures += 1
+            return False
+
+    def list_mcp_pins(self, server=None) -> list[dict]:
+        try:
+            if server:
+                rows, cols = self._exec("SELECT * FROM mcp_pins WHERE server=%s ORDER BY tool_name",
+                                        (server,), fetch="all")
+            else:
+                rows, cols = self._exec("SELECT * FROM mcp_pins ORDER BY server, tool_name",
+                                        fetch="all")
+            return [dict(zip(cols, r)) for r in rows or []]
+        except Exception:
+            return []
+
+    def record_mcp_change(self, change_id, **ch) -> bool:
+        try:
+            self._exec(
+                "INSERT INTO mcp_changes (id, server, tool_name, change_type, severity, "
+                "detected_at, old_fingerprint, new_fingerprint, summary, acknowledged) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,0)",
+                (change_id, ch["server"], ch["tool_name"], ch["change_type"], ch["severity"],
+                 ch["detected_at"], ch.get("old_fingerprint"), ch.get("new_fingerprint"),
+                 ch["summary"]))
+            self.stats.writes += 1
+            return True
+        except Exception:
+            self.stats.write_failures += 1
+            return False
+
+    def list_mcp_changes(self, acknowledged=None, limit=100) -> list[dict]:
+        try:
+            if acknowledged is None:
+                rows, cols = self._exec("SELECT * FROM mcp_changes ORDER BY detected_at DESC "
+                                        "LIMIT %s", (limit,), fetch="all")
+            else:
+                rows, cols = self._exec("SELECT * FROM mcp_changes WHERE acknowledged=%s "
+                                        "ORDER BY detected_at DESC LIMIT %s",
+                                        (1 if acknowledged else 0, limit), fetch="all")
+            return [dict(zip(cols, r)) for r in rows or []]
+        except Exception:
+            return []
+
+    def acknowledge_mcp_change(self, change_id) -> bool:
+        try:
+            rc, _ = self._exec("UPDATE mcp_changes SET acknowledged=1 WHERE id=%s AND "
+                               "acknowledged=0", (change_id,), fetch="rowcount")
+            return bool(rc)
+        except Exception:
+            return False
+
     # -- retention -----------------------------------------------------
 
     def apply_retention(self, policy: RetentionPolicy) -> dict[str, int]:

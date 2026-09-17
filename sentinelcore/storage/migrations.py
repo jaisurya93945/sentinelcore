@@ -96,6 +96,41 @@ MIGRATIONS: list[tuple[int, str, list[str]]] = [
     ),
 ]
 
+MIGRATIONS.append((
+    3,
+    "mcp tool definition pins for rug-pull detection",
+    [
+        """CREATE TABLE IF NOT EXISTS mcp_pins (
+            id TEXT PRIMARY KEY,
+            server TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            definition TEXT NOT NULL,
+            first_seen TEXT NOT NULL,
+            last_verified TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pinned'
+        )""",
+        # One pin per (server, tool). A UNIQUE index rather than a composite
+        # primary key so the row keeps a stable id across re-pins.
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_pins_identity ON mcp_pins(server, tool_name)",
+        "CREATE INDEX IF NOT EXISTS idx_mcp_pins_server ON mcp_pins(server)",
+        """CREATE TABLE IF NOT EXISTS mcp_changes (
+            id TEXT PRIMARY KEY,
+            server TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            change_type TEXT NOT NULL,
+            severity TEXT NOT NULL,
+            detected_at TEXT NOT NULL,
+            old_fingerprint TEXT,
+            new_fingerprint TEXT,
+            summary TEXT NOT NULL,
+            acknowledged INTEGER NOT NULL DEFAULT 0
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_mcp_changes_detected ON mcp_changes(detected_at)",
+        "CREATE INDEX IF NOT EXISTS idx_mcp_changes_ack ON mcp_changes(acknowledged)",
+    ],
+))
+
 LATEST_VERSION = max(v for v, _, _ in MIGRATIONS)
 
 _DESTRUCTIVE = re.compile(r"\b(DROP\s+(TABLE|COLUMN|INDEX)|TRUNCATE|DELETE\s+FROM)\b", re.I)
