@@ -48,7 +48,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 ## P2 — Pre-deployment and continuous surfaces
 
-**9. Pre-deployment assessment.** `sentinel scan .` over a codebase and its configuration: system prompts, registered tools, MCP server definitions, RAG sources. Produces a report. This is the "before deployment" leg of the product diagram and is currently absent.
+**9. Pre-deployment assessment. — DONE.** `sentinel assess .` over a codebase: hardcoded credentials, MCP server and tool definitions (including nested schema properties), consequential tools declared without an authorization rule, and SentinelCore's own configuration. CI-usable exit codes, JSON output, inline `sentinel:ignore` suppression that is counted rather than silent, and every check declaring what it cannot see. See `docs/ASSESSMENT.md`. 23 tests.
 
 **10. Continuous monitoring.** Scheduled re-scan of MCP tool definitions with fingerprint pinning and change detection — a trusted tool whose description silently changes is a real, documented attack (rug-pull) and the current MCP scanning is one-shot.
 

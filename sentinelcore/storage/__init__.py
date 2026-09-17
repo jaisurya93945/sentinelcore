@@ -8,7 +8,7 @@ the default so `pip install sentinelcore` works with no database to set up.
     SENTINELCORE_AUDIT_DB_PATH=./sentinelcore.db
 
     SENTINELCORE_STORAGE_BACKEND=postgres
-    SENTINELCORE_POSTGRES_URL=postgresql://user:pass@host/db
+    SENTINELCORE_POSTGRES_URL=postgresql://user:pass@host/db  # sentinel:ignore[secrets]
 
 Retention runs opportunistically after writes rather than on a scheduler:
 this package has no scheduler, and inventing one to support a v1 feature

@@ -16,25 +16,37 @@ import sys
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="sentinel", description="SentinelCore security control plane")
-    parser.add_argument("--json", action="store_true", help="machine-readable output")
+    # --json is accepted BOTH before and after the subcommand. Requiring it
+    # before ("sentinel --json assess .") is unlike every other CLI a
+    # developer uses, and "sentinel assess . --json" failing with a bare
+    # argparse error is a bad first impression for a security tool.
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--json", action="store_true", help="machine-readable output")
+
+    parser = argparse.ArgumentParser(prog="sentinel", parents=[common],
+                                     description="SentinelCore security control plane")
     sub = parser.add_subparsers(dest="command")
 
-    sub.add_parser("doctor", help="check installation and configuration")
+    sub.add_parser("doctor", help="check installation and configuration", parents=[common])
 
-    exp = sub.add_parser("export-feedback", help="export operator-reported false positives as benchmark cases")
+    ass = sub.add_parser("assess", parents=[common], help="pre-deployment assessment of a codebase")
+    ass.add_argument("path", nargs="?", default=".")
+    ass.add_argument("--no-limitations", action="store_true",
+                     help="omit the 'what this cannot see' section (not recommended)")
+
+    exp = sub.add_parser("export-feedback", parents=[common], help="export operator-reported false positives as benchmark cases")
     exp.add_argument("--out", default="hard_negatives.jsonl")
 
-    pol = sub.add_parser("policy", help="inspect policy presets")
+    pol = sub.add_parser("policy", parents=[common], help="inspect policy presets")
     pol.add_argument("action", choices=["list", "show"], nargs="?", default="list")
     pol.add_argument("name", nargs="?", default=None)
 
-    s = sub.add_parser("scan", help="scan text or a file")
+    s = sub.add_parser("scan", parents=[common], help="scan text or a file")
     s.add_argument("target", help="text to scan, or - to read stdin")
     s.add_argument("--policy", default="balanced", help="monitor | balanced | strict | maximum")
     s.add_argument("--origin", default="input")
 
-    t = sub.add_parser("tool", help="check a tool call")
+    t = sub.add_parser("tool", parents=[common], help="check a tool call")
     t.add_argument("name")
     t.add_argument("--args", default="{}", help="JSON object of arguments")
 
@@ -45,6 +57,22 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "doctor":
         return _doctor(args.json)
+
+    if args.command == "assess":
+        from pathlib import Path
+
+        from sentinelcore.assess.runner import assess, render
+
+        root = Path(args.path).resolve()
+        if not root.exists():
+            print(f"error: {root} does not exist", file=sys.stderr)
+            return 3
+        report = assess(root)
+        if args.json:
+            print(json.dumps(report.to_dict(), indent=2))
+        else:
+            print(render(report, show_limitations=not args.no_limitations))
+        return report.exit_code()
 
     if args.command == "export-feedback":
         from sentinelcore.services.feedback import export_hard_negatives, list_feedback, Verdict
