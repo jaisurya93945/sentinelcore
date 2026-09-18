@@ -18,7 +18,7 @@ Modern AI apps expose models to untrusted user input, external documents, tools,
 
 We never fabricate accuracy, precision, recall, F1, latency, or detection-rate numbers. Every claim in this repo reflects what is actually implemented and tested — not the long-term vision. Planned and experimental capabilities are always labeled as such.
 
-## Current Status — v0.3.0
+## Current Status — v0.4.0
 
 Full implemented/experimental/planned breakdown, security gaps, and an honest "where this is and isn't competitive" assessment: `docs/CAPABILITY_MATRIX.md`.
 

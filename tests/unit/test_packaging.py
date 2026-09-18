@@ -94,3 +94,16 @@ def test_core_dependencies_stay_minimal():
     names = {d.split(">")[0].split("=")[0].split("[")[0].strip().lower() for d in deps}
     for heavy in ("fastapi", "uvicorn", "scikit-learn", "torch", "transformers", "openai", "httpx"):
         assert heavy not in names, f"{heavy} must be an optional extra, not a core dependency"
+
+
+def test_runtime_version_matches_the_package():
+    """The API advertises settings.version. It was hardcoded to 0.3.0 while
+    the package was 0.4.0, so a client checking the version got an answer
+    two milestones stale."""
+    import tomllib
+
+    import sentinelcore
+    from sentinelcore.core.config import settings
+
+    declared = tomllib.load(open(ROOT / "pyproject.toml", "rb"))["project"]["version"]
+    assert settings.version == sentinelcore.__version__ == declared

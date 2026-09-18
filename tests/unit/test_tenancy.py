@@ -244,3 +244,50 @@ def test_no_principal_bound_falls_back_to_the_default_tenant():
     assert current() == ANONYMOUS or current().tenant
     with acting_as(ANONYMOUS):
         assert current().tenant == DEFAULT_TENANT
+
+
+def test_exhaustive_cross_tenant_probe():
+    """Every operator-facing path, probed from the wrong tenant.
+
+    Written as one test rather than eighteen because the property is
+    'no path leaks', and per-path tests invite adding a path without a
+    test. If this system grows a new capability, it belongs in this list.
+    """
+    from sentinelcore.services import approvals
+    from sentinelcore.storage import RetentionPolicy
+
+    store = get_store()
+    with acting_as(ACME):
+        store.write_scan_event("A-evt", "scan", 60, "block", [])
+        aid = approvals.request_approval("A-scan", "payment.transfer", "dig", 90)
+        fid = fb.submit("A-scan", fb.Verdict.FALSE_POSITIVE, "A note")
+        fb.add_text(fid, "A secret text")
+        mp.pin_tools("kb", [{"name": "search", "description": "A version"}])
+        mp.check_tools("kb", [{"name": "search", "description": "A poisoned"}])
+        change_id = mp.unacknowledged_changes()[0]["id"]
+
+    with acting_as(GLOBEX):
+        assert store.recent_scan_events(QueryFilters(limit=99)) == []
+        assert store.count_scan_events() == 0
+        assert approvals.get_approval(aid) is None
+        assert approvals.list_pending() == []
+        assert approvals.decide(aid, True, "b")[1] is False
+        assert approvals.permits_execution(aid) is False
+        assert fb.list_feedback() == []
+        assert fb.summary()["total"] == 0
+        assert fb.add_text(fid, "hijack") is False
+        assert mp.get_store().list_mcp_pins() == []
+        assert mp.unacknowledged_changes() == []
+        assert mp.acknowledge(change_id) is False
+        assert mp.check_tools("kb", [{"name": "search", "description": "x"}],
+                              record=False)["status"] == "unpinned"
+        # The most destructive probe: retention with every window at zero.
+        store.apply_retention(RetentionPolicy(audit_days=0, feedback_days=0,
+                                              approvals_days=0, max_audit_rows=0))
+
+    with acting_as(ACME):
+        assert store.count_scan_events() == 1, "another tenant's retention deleted our audit"
+        assert approvals.get_approval(aid)["status"] == "pending"
+        assert fb.list_feedback()[0]["text"] == "A secret text"
+        assert mp.get_store().list_mcp_pins("kb")
+        assert len(mp.unacknowledged_changes()) == 1

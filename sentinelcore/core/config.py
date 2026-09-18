@@ -1,9 +1,17 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+from sentinelcore._version import __version__ as _PACKAGE_VERSION
+
+
 class Settings(BaseSettings):
     app_name: str = "SentinelCore"
-    version: str = "0.3.0"
+    # Read from sentinelcore._version, never duplicated. This was hardcoded
+    # to "0.3.0" while the package was at 0.4.0, so the API advertised a
+    # version the package had not been for two milestones -- a client
+    # checking it got the wrong answer. test_packaging.py asserts the three
+    # sources stay equal.
+    version: str = _PACKAGE_VERSION
     environment: str = "development"
     upstream_base_url: str = "https://api.openai.com"
     upstream_timeout_seconds: float = 60.0

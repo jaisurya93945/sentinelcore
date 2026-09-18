@@ -145,3 +145,63 @@ def test_alert_status_endpoint_reports_operational_state():
     body = r.json()
     assert "sinks" in body and "stats" in body
     assert set(body["stats"]) >= {"dispatched", "delivered", "failed", "dropped_queue_full"}
+
+
+# --- tenant isolation in the alert path -----------------------------------
+#
+# A real bug found by source audit AFTER the storage-layer static check was
+# in place: the cooldown key had no tenant, so one tenant looping a cheap
+# attack silenced every other tenant's alerts of the same shape. Denial of
+# alerting across a tenant boundary. The storage check could not catch it
+# because alerting is not storage.
+
+def test_one_tenant_cannot_suppress_another_tenants_alerts():
+    from sentinelcore.core.identity import Principal, acting_as
+
+    mgr = AlertManager(cooldown_seconds=60)
+    got = []
+    mgr.register("t", got.append)
+    f = _findings("instruction_override")
+
+    with acting_as(Principal("a", "acme", "admin")):
+        assert mgr.notify("a1", "scan", "block", 60, f) is True
+    with acting_as(Principal("b", "globex", "admin")):
+        assert mgr.notify("b1", "scan", "block", 60, f) is True, (
+            "another tenant's alert was suppressed by this tenant's cooldown"
+        )
+    mgr.flush()
+    assert sorted(a.tenant for a in got) == ["acme", "globex"]
+    mgr.clear_sinks()
+
+
+def test_cooldown_still_suppresses_repeats_within_one_tenant():
+    """The fix must not disable the cooldown it was protecting."""
+    from sentinelcore.core.identity import Principal, acting_as
+
+    mgr = AlertManager(cooldown_seconds=60)
+    got = []
+    mgr.register("t", got.append)
+    f = _findings("instruction_override")
+    with acting_as(Principal("a", "acme", "admin")):
+        for _ in range(5):
+            mgr.notify("a", "scan", "block", 60, f)
+    mgr.flush()
+    assert len(got) == 1
+    assert mgr.stats.suppressed_cooldown == 4
+    mgr.clear_sinks()
+
+
+def test_alert_payload_identifies_the_tenant():
+    """An operator running a multi-tenant gateway must be able to tell whose
+    workload produced an alert."""
+    from sentinelcore.core.identity import Principal, acting_as
+
+    mgr = AlertManager(cooldown_seconds=0)
+    got = []
+    mgr.register("t", got.append)
+    with acting_as(Principal("a", "acme", "admin")):
+        mgr.notify("s", "scan", "block", 60, _findings("x"))
+    mgr.flush()
+    assert got[0].to_dict()["tenant"] == "acme"
+    assert "<acme>" in got[0].text()
+    mgr.clear_sinks()

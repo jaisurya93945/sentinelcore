@@ -62,19 +62,23 @@ class Alert:
     risk_score: int
     finding_types: list[str]
     detail: str | None = None
+    # Which tenant the decision belongs to. Without it an operator running a
+    # multi-tenant gateway cannot tell whose workload produced the alert.
+    tenant: str = "default"
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "timestamp": self.timestamp, "scan_id": self.scan_id, "endpoint": self.endpoint,
             "decision": self.decision, "risk_score": self.risk_score,
             "finding_types": self.finding_types, "detail": self.detail,
-            "source": "sentinelcore",
+            "tenant": self.tenant, "source": "sentinelcore",
         }
 
     def text(self) -> str:
         types = ", ".join(self.finding_types) or "no content findings"
         tail = f" [{self.detail}]" if self.detail else ""
-        return (f"SentinelCore {self.decision.upper()} on {self.endpoint}{tail} "
+        scope = "" if self.tenant == "default" else f" <{self.tenant}>"
+        return (f"SentinelCore{scope} {self.decision.upper()} on {self.endpoint}{tail} "
                 f"(risk {self.risk_score}): {types}")
 
 
@@ -124,11 +128,20 @@ class AlertManager:
     # ---------------------------------------------------------- dispatch
 
     def _cooldown_key(self, alert: Alert) -> str:
-        """Rate-limit per (endpoint, decision, finding shape) rather than
-        per event, so a client looping one attack produces one alert
+        """Rate-limit per (tenant, endpoint, decision, finding shape) rather
+        than per event, so a client looping one attack produces one alert
         instead of thousands -- while a genuinely new attack shape still
-        gets through immediately."""
-        return f"{alert.endpoint}|{alert.decision}|{','.join(sorted(alert.finding_types))}"
+        gets through immediately.
+
+        THE TENANT IS PART OF THE KEY, and its absence was a real isolation
+        bug. Without it, one tenant looping a cheap attack silenced every
+        other tenant's alerts of the same shape for the whole cooldown --
+        denial of alerting across a tenant boundary, reachable by anyone
+        holding any tenant's credential. The storage-layer static check
+        could not catch this because alerting is not storage.
+        """
+        return (f"{alert.tenant}|{alert.endpoint}|{alert.decision}|"
+                f"{','.join(sorted(alert.finding_types))}")
 
     def notify(self, scan_id: str, endpoint: str, decision: str, risk_score: int,
                findings: list[Finding], detail: str | None = None) -> bool:
@@ -143,12 +156,15 @@ class AlertManager:
             except ValueError:
                 return False
 
+            from sentinelcore.core.identity import current_tenant
+
             alert = Alert(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 scan_id=scan_id, endpoint=endpoint, decision=decision,
                 risk_score=risk_score,
                 finding_types=sorted({f.type for f in findings}),
                 detail=detail,
+                tenant=current_tenant(),
             )
 
             key = self._cooldown_key(alert)

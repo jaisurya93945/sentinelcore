@@ -42,6 +42,24 @@ The first version of migration 5 created a tenant-scoped unique index on `mcp_pi
 
 The old index is now dropped. That required narrowing the non-destructive migration rule, with the reasoning recorded in the code: **`DROP INDEX` removes no data.** An index is derived entirely from the rows and rebuilding it loses nothing, whereas `DROP TABLE` and `DROP COLUMN` destroy data irrecoverably. Conflating the two forced a genuine correctness fix to be avoided rather than made.
 
+## A second isolation bug, found by source audit rather than by the static check
+
+The storage-layer check guarantees that no *query* crosses a tenant boundary. It cannot see anything that is not storage — and a second real bug lived exactly there.
+
+**The alert cooldown key was `(endpoint, decision, finding_types)` with no tenant.** One tenant looping a cheap attack therefore silenced every other tenant's alerts of the same shape for the whole cooldown window: **denial of alerting across a tenant boundary, reachable by anyone holding any tenant's credential.** Demonstrated before fixing — tenant B's alert returned `False` (suppressed) purely because tenant A had alerted first.
+
+The key now includes the tenant, and alerts carry a `tenant` field so an operator can tell whose workload produced one. Both the isolation and the original cooldown behaviour are asserted by tests.
+
+The lesson generalises: **a static check over one layer says nothing about the layers it does not parse.** Tenant isolation has to be audited wherever state is shared, and the alert manager holds shared in-process state (cooldown map, queue, counters) that storage-layer tooling cannot see.
+
+## Known, accepted side channel
+
+`GET /api/v1/storage/health` returns **process-global** counters — total writes, write failures, rows deleted by retention. These are operational telemetry about the gateway process, not rows, but in a multi-tenant deployment a tenant's viewer can infer another tenant's *traffic volume* from them.
+
+This is not fixed, and it is recorded rather than quietly left: an operator needs these counters to know whether the audit log is working at all, and per-tenant counters would be a larger change than the disclosure warrants. **If tenants are mutually untrusted and traffic volume is sensitive, do not grant tenant users the viewer role on this endpoint.**
+
+The alert queue is also process-global: a sustained burst from one tenant can fill it and cause `dropped_queue_full` for others. Bounded by design — an unbounded queue is a memory-exhaustion vector — but the drop is not tenant-fair, and the `dropped_queue_full` counter is how an operator sees it happening.
+
 ## Adversarial checks performed
 
 | Attempt | Result |
@@ -50,6 +68,8 @@ The old index is now dropped. That required narrowing the non-destructive migrat
 | Empty or whitespace tenant in config | Falls back to `default` |
 | Table names in retention `DELETE` | Hardcoded tuple, never user-controlled |
 | Nested `acting_as` scopes | Restore correctly on exit |
+| One tenant suppressing another's alerts | **Was possible — fixed**, regression tested |
+| 18-path cross-tenant probe (read, count, decide, attach, acknowledge, retention) | No leak found |
 
 ## Upgrade path
 

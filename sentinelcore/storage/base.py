@@ -68,7 +68,20 @@ class QueryFilters:
 
 
 class Store(ABC):
-    """Every backend implements this. Callers never import a backend."""
+    """Every backend implements this. Callers never import a backend.
+
+    TENANT SCOPING IS AMBIENT. No method on this interface takes a tenant
+    argument: every implementation reads it from the request context
+    (`sentinelcore.core.identity.current_tenant`). That is deliberate --
+    a tenant parameter means one forgotten call site is a cross-tenant
+    leak, and partial isolation is worse than none because it looks like a
+    boundary. `tests/unit/test_tenancy.py` parses both backends and fails
+    CI on any query against a tenant-scoped table without a tenant
+    predicate.
+
+    BOTH BACKENDS MUST PROVIDE THE SAME SECURITY SEMANTICS. A backend that
+    is weaker means behaviour changes silently with configuration, which a
+    caller cannot reason about."""
 
     def __init__(self) -> None:
         self.stats = StorageStats()
@@ -138,11 +151,19 @@ class Store(ABC):
     @abstractmethod
     def upsert_mcp_pin(self, pin_id: str, server: str, tool_name: str,
                        fingerprint: str, definition: str, now_iso: str) -> bool:
-        """Establishes or refreshes one tool's baseline. Must be an upsert on
-        (server, tool_name) so re-pinning replaces rather than duplicates."""
+        """Establishes or refreshes one tool's baseline.
+
+        The identity is **(tenant, server, tool_name)** -- not
+        (server, tool_name). Global uniqueness was a real isolation bug:
+        two tenants pinning a server with the same name collided and one
+        silently overwrote the other's baseline. The upsert must conflict
+        on all three columns, and the tenant is taken from the ambient
+        context rather than a parameter, so a caller cannot omit it."""
 
     @abstractmethod
-    def list_mcp_pins(self, server: str | None = None) -> list[dict]: ...
+    def list_mcp_pins(self, server: str | None = None) -> list[dict]:
+        """Pins for the CURRENT tenant only. There is deliberately no
+        cross-tenant listing on this interface."""
 
     @abstractmethod
     def record_mcp_change(self, change_id: str, **change) -> bool: ...

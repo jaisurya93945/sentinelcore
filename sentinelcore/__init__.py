@@ -13,7 +13,6 @@ and planned. Claims in this project are traceable to result files; see
 docs/evidence/EVIDENCE_TABLE.md.
 """
 
+from sentinelcore._version import __version__
 from sentinelcore.guard import Blocked, Decision, EnforcementStatus, Guard, ScanOutcome
-
-__version__ = "0.4.0"
 __all__ = ["Guard", "ScanOutcome", "Decision", "EnforcementStatus", "Blocked", "__version__"]
