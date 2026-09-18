@@ -36,6 +36,7 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from sentinelcore.core.identity import current_tenant
 from sentinelcore.storage.base import QueryFilters, RetentionPolicy, Store
 from sentinelcore.storage.migrations import LATEST_VERSION, pending
 
@@ -149,9 +150,10 @@ class SQLiteStore(Store):
         try:
             self._conn().execute(
                 "INSERT INTO scan_events (scan_id, timestamp, endpoint, detail, risk_score, "
-                "decision, finding_count, findings_summary) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "decision, finding_count, findings_summary, tenant) VALUES (?,?,?,?,?,?,?,?,?)",
                 (scan_id, datetime.now(timezone.utc).isoformat(), endpoint, detail,
-                 risk_score, decision, len(findings_summary), json.dumps(findings_summary)),
+                 risk_score, decision, len(findings_summary), json.dumps(findings_summary),
+                 current_tenant()),
             )
             self.stats.writes += 1
             return True
@@ -162,9 +164,13 @@ class SQLiteStore(Store):
             return False
 
     def recent_scan_events(self, filters: QueryFilters) -> list[dict]:
+        # The tenant predicate is in the LITERAL SQL, not appended at
+        # runtime, so the static check in test_tenancy.py can verify it.
+        # A security control that cannot be verified statically is weaker
+        # than one that can, even when both are correct today.
         sql = ("SELECT scan_id, timestamp, endpoint, detail, risk_score, decision, "
-               "finding_count, findings_summary FROM scan_events")
-        where, params = [], []
+               "finding_count, findings_summary FROM scan_events WHERE tenant = ?")
+        where, params = [], [current_tenant()]
         if filters.decision:
             where.append("decision = ?"); params.append(filters.decision)
         if filters.endpoint:
@@ -172,7 +178,7 @@ class SQLiteStore(Store):
         if filters.since:
             where.append("timestamp >= ?"); params.append(filters.since)
         if where:
-            sql += " WHERE " + " AND ".join(where)
+            sql += " AND " + " AND ".join(where)
         sql += " ORDER BY id DESC LIMIT ? OFFSET ?"
         params += [filters.limit, filters.offset]
         try:
@@ -186,7 +192,8 @@ class SQLiteStore(Store):
 
     def count_scan_events(self) -> int:
         try:
-            return self._conn().execute("SELECT COUNT(*) c FROM scan_events").fetchone()["c"]
+            return self._conn().execute("SELECT COUNT(*) c FROM scan_events WHERE tenant = ?",
+                                        (current_tenant(),)).fetchone()["c"]
         except Exception:
             return -1
 
@@ -197,8 +204,9 @@ class SQLiteStore(Store):
         try:
             self._conn().execute(
                 "INSERT INTO approvals (id, scan_id, tool_name, arguments_digest, risk_score, "
-                "created_at, expires_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')",
-                (approval_id, scan_id, tool_name, arguments_digest, risk_score, created_at, expires_at),
+                "created_at, expires_at, status, tenant) VALUES (?,?,?,?,?,?,?,'pending',?)",
+                (approval_id, scan_id, tool_name, arguments_digest, risk_score, created_at,
+                 expires_at, current_tenant()),
             )
             self.stats.writes += 1
             return True
@@ -208,14 +216,15 @@ class SQLiteStore(Store):
             return False
 
     def _expire(self, conn, now_iso: str) -> None:
-        conn.execute("UPDATE approvals SET status='expired' WHERE status='pending' AND expires_at < ?",
-                     (now_iso,))
+        conn.execute("UPDATE approvals SET status='expired' WHERE status='pending' "
+                     "AND expires_at < ? AND tenant = ?", (now_iso, current_tenant()))
 
     def get_approval(self, approval_id, now_iso) -> dict | None:
         try:
             conn = self._conn()
             self._expire(conn, now_iso)
-            row = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
+            row = conn.execute("SELECT * FROM approvals WHERE id = ? AND tenant = ?",
+                               (approval_id, current_tenant())).fetchone()
             return dict(row) if row else None
         except Exception as e:
             logger.warning(f"approval read failed: {e}")
@@ -226,8 +235,8 @@ class SQLiteStore(Store):
             conn = self._conn()
             self._expire(conn, now_iso)
             rows = conn.execute(
-                "SELECT * FROM approvals WHERE status='pending' ORDER BY created_at DESC LIMIT ?",
-                (limit,)).fetchall()
+                "SELECT * FROM approvals WHERE status='pending' AND tenant = ? "
+                "ORDER BY created_at DESC LIMIT ?", (current_tenant(), limit)).fetchall()
             return [dict(r) for r in rows]
         except Exception as e:
             logger.warning(f"approval listing failed: {e}")
@@ -246,11 +255,12 @@ class SQLiteStore(Store):
                 self._expire(conn, now_iso)
                 cur = conn.execute(
                     "UPDATE approvals SET status=?, decided_at=?, decided_by=?, reason=? "
-                    "WHERE id=? AND status='pending'",
-                    (status, now_iso, decided_by, reason, approval_id),
+                    "WHERE id=? AND status='pending' AND tenant=?",
+                    (status, now_iso, decided_by, reason, approval_id, current_tenant()),
                 )
                 applied = cur.rowcount > 0
-                row = conn.execute("SELECT * FROM approvals WHERE id = ?", (approval_id,)).fetchone()
+                row = conn.execute("SELECT * FROM approvals WHERE id = ? AND tenant = ?",
+                                   (approval_id, current_tenant())).fetchone()
                 conn.execute("COMMIT")
             except Exception:
                 conn.execute("ROLLBACK")
@@ -266,8 +276,8 @@ class SQLiteStore(Store):
         try:
             self._conn().execute(
                 "INSERT INTO feedback (id, scan_id, verdict, note, submitted_by, submitted_at, "
-                "text_supplied) VALUES (?, ?, ?, ?, ?, ?, 0)",
-                (feedback_id, scan_id, verdict, note, submitted_by, submitted_at),
+                "text_supplied, tenant) VALUES (?,?,?,?,?,?,0,?)",
+                (feedback_id, scan_id, verdict, note, submitted_by, submitted_at, current_tenant()),
             )
             self.stats.writes += 1
             return True
@@ -279,7 +289,8 @@ class SQLiteStore(Store):
     def attach_feedback_text(self, feedback_id, text) -> bool:
         try:
             cur = self._conn().execute(
-                "UPDATE feedback SET text = ?, text_supplied = 1 WHERE id = ?", (text, feedback_id))
+                "UPDATE feedback SET text = ?, text_supplied = 1 WHERE id = ? AND tenant = ?",
+                (text, feedback_id, current_tenant()))
             return cur.rowcount > 0
         except Exception as e:
             logger.warning(f"feedback text attach failed: {e}")
@@ -290,11 +301,13 @@ class SQLiteStore(Store):
             conn = self._conn()
             if verdict:
                 rows = conn.execute(
-                    "SELECT * FROM feedback WHERE verdict = ? ORDER BY submitted_at DESC LIMIT ?",
-                    (verdict, limit)).fetchall()
+                    "SELECT * FROM feedback WHERE verdict = ? AND tenant = ? "
+                    "ORDER BY submitted_at DESC LIMIT ?",
+                    (verdict, current_tenant(), limit)).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM feedback ORDER BY submitted_at DESC LIMIT ?", (limit,)).fetchall()
+                    "SELECT * FROM feedback WHERE tenant = ? ORDER BY submitted_at DESC LIMIT ?",
+                    (current_tenant(), limit)).fetchall()
             return [dict(r) for r in rows]
         except Exception as e:
             logger.warning(f"feedback read failed: {e}")
@@ -303,7 +316,8 @@ class SQLiteStore(Store):
     def feedback_counts(self) -> dict[str, int]:
         try:
             rows = self._conn().execute(
-                "SELECT verdict, COUNT(*) c FROM feedback GROUP BY verdict").fetchall()
+                "SELECT verdict, COUNT(*) c FROM feedback WHERE tenant = ? GROUP BY verdict",
+                (current_tenant(),)).fetchall()
             return {r["verdict"]: r["c"] for r in rows}
         except Exception:
             return {}
@@ -317,11 +331,12 @@ class SQLiteStore(Store):
             # overwriting it would erase how long a tool has been trusted.
             self._conn().execute(
                 "INSERT INTO mcp_pins (id, server, tool_name, fingerprint, definition, "
-                "first_seen, last_verified, status) VALUES (?,?,?,?,?,?,?,'pinned') "
-                "ON CONFLICT(server, tool_name) DO UPDATE SET "
+                "first_seen, last_verified, status, tenant) VALUES (?,?,?,?,?,?,?,'pinned',?) "
+                "ON CONFLICT(tenant, server, tool_name) DO UPDATE SET "
                 "fingerprint=excluded.fingerprint, definition=excluded.definition, "
                 "last_verified=excluded.last_verified",
-                (pin_id, server, tool_name, fingerprint, definition, now_iso, now_iso))
+                (pin_id, server, tool_name, fingerprint, definition, now_iso, now_iso,
+                 current_tenant()))
             self.stats.writes += 1
             return True
         except Exception as e:
@@ -333,10 +348,11 @@ class SQLiteStore(Store):
         try:
             conn = self._conn()
             if server:
-                rows = conn.execute("SELECT * FROM mcp_pins WHERE server = ? ORDER BY tool_name",
-                                    (server,)).fetchall()
+                rows = conn.execute("SELECT * FROM mcp_pins WHERE server = ? AND tenant = ? "
+                                    "ORDER BY tool_name", (server, current_tenant())).fetchall()
             else:
-                rows = conn.execute("SELECT * FROM mcp_pins ORDER BY server, tool_name").fetchall()
+                rows = conn.execute("SELECT * FROM mcp_pins WHERE tenant = ? ORDER BY server, tool_name",
+                                    (current_tenant(),)).fetchall()
             return [dict(r) for r in rows]
         except Exception as e:
             logger.warning(f"mcp pin read failed: {e}")
@@ -346,11 +362,11 @@ class SQLiteStore(Store):
         try:
             self._conn().execute(
                 "INSERT INTO mcp_changes (id, server, tool_name, change_type, severity, "
-                "detected_at, old_fingerprint, new_fingerprint, summary, acknowledged) "
-                "VALUES (?,?,?,?,?,?,?,?,?,0)",
+                "detected_at, old_fingerprint, new_fingerprint, summary, acknowledged, tenant) "
+                "VALUES (?,?,?,?,?,?,?,?,?,0,?)",
                 (change_id, ch["server"], ch["tool_name"], ch["change_type"], ch["severity"],
                  ch["detected_at"], ch.get("old_fingerprint"), ch.get("new_fingerprint"),
-                 ch["summary"]))
+                 ch["summary"], current_tenant()))
             self.stats.writes += 1
             return True
         except Exception as e:
@@ -362,12 +378,14 @@ class SQLiteStore(Store):
         try:
             conn = self._conn()
             if acknowledged is None:
-                rows = conn.execute("SELECT * FROM mcp_changes ORDER BY detected_at DESC LIMIT ?",
-                                    (limit,)).fetchall()
+                rows = conn.execute("SELECT * FROM mcp_changes WHERE tenant = ? "
+                                    "ORDER BY detected_at DESC LIMIT ?",
+                                    (current_tenant(), limit)).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT * FROM mcp_changes WHERE acknowledged = ? ORDER BY detected_at DESC "
-                    "LIMIT ?", (1 if acknowledged else 0, limit)).fetchall()
+                    "SELECT * FROM mcp_changes WHERE acknowledged = ? AND tenant = ? "
+                    "ORDER BY detected_at DESC LIMIT ?",
+                    (1 if acknowledged else 0, current_tenant(), limit)).fetchall()
             return [dict(r) for r in rows]
         except Exception as e:
             logger.warning(f"mcp change read failed: {e}")
@@ -376,8 +394,8 @@ class SQLiteStore(Store):
     def acknowledge_mcp_change(self, change_id) -> bool:
         try:
             cur = self._conn().execute(
-                "UPDATE mcp_changes SET acknowledged = 1 WHERE id = ? AND acknowledged = 0",
-                (change_id,))
+                "UPDATE mcp_changes SET acknowledged = 1 WHERE id = ? AND acknowledged = 0 "
+                "AND tenant = ?", (change_id, current_tenant()))
             return cur.rowcount > 0
         except Exception as e:
             logger.warning(f"mcp change acknowledge failed: {e}")
@@ -398,7 +416,8 @@ class SQLiteStore(Store):
                                         ("feedback", policy.feedback_days, "submitted_at"),
                                         ("approvals", policy.approvals_days, "created_at")):
                 cutoff = (now - timedelta(days=days)).isoformat()
-                cur = conn.execute(f"DELETE FROM {table} WHERE {ts_col} < ?", (cutoff,))
+                cur = conn.execute(f"DELETE FROM {table} WHERE {ts_col} < ? AND tenant = ?",
+                                   (cutoff, current_tenant()))
                 deleted[table] = cur.rowcount
 
             # Count-based safeguard. Time alone cannot bound a burst inside
@@ -409,7 +428,8 @@ class SQLiteStore(Store):
                 excess = total - policy.max_audit_rows
                 cur = conn.execute(
                     "DELETE FROM scan_events WHERE id IN "
-                    "(SELECT id FROM scan_events ORDER BY id ASC LIMIT ?)", (excess,))
+                    "(SELECT id FROM scan_events WHERE tenant = ? ORDER BY id ASC LIMIT ?)",
+                    (current_tenant(), excess))
                 deleted["scan_events_overflow"] = cur.rowcount
 
             self.stats.retention_runs += 1

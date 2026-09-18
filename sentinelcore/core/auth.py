@@ -60,6 +60,22 @@ def parse_api_keys() -> dict[str, Role]:
     return parsed
 
 
+def resolve_principal(api_key: str | None):
+    """Maps a presented key to a Principal.
+
+    When authentication is disabled there is one implicit principal in the
+    default tenant. That is correct for local use and is exactly why
+    `sentinel assess` reports disabled auth as a HIGH finding: with no
+    credential there is no identity, and with no identity there is no
+    tenant isolation."""
+    from sentinelcore.core.identity import ANONYMOUS, parse_principals
+
+    principals = parse_principals()
+    if not principals:
+        return ANONYMOUS
+    return principals.get((api_key or "").strip())
+
+
 def require_role(minimum: Role):
     """FastAPI dependency factory. Auth is skipped entirely (request
     allowed through) if no keys are configured at all -- see module

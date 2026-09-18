@@ -30,6 +30,24 @@ EXEMPT_PATHS = {"/api/v1/health", "/", "/docs", "/openapi.json", "/redoc"}
 async def resource_protection_middleware(request: Request, call_next):
     path = request.url.path
 
+    # Bind the principal for the whole request. Done here rather than in a
+    # route dependency so that EVERY path sees it -- including endpoints
+    # that do not declare a role requirement. Storage reads the tenant
+    # ambiently, so a request that reached a handler without a principal
+    # bound would read the default tenant's data.
+    from sentinelcore.core.auth import resolve_principal
+    from sentinelcore.core.identity import ANONYMOUS, reset_principal, set_principal
+
+    principal = resolve_principal(request.headers.get("x-api-key")) or ANONYMOUS
+    token = set_principal(principal)
+    try:
+        return await _handle(request, call_next, path)
+    finally:
+        reset_principal(token)
+
+
+async def _handle(request: Request, call_next, path: str):
+
     if path in EXEMPT_PATHS:
         return await call_next(request)
 

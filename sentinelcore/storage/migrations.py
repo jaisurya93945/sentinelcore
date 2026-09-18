@@ -131,9 +131,59 @@ MIGRATIONS.append((
     ],
 ))
 
+MIGRATIONS.append((
+    4,
+    "tenant scoping",
+    # Additive only. Existing rows backfill to 'default', so a
+    # single-tenant deployment upgrades in place and keeps every record.
+    [
+        "ALTER TABLE scan_events ADD COLUMN tenant TEXT NOT NULL DEFAULT 'default'",
+        "ALTER TABLE approvals   ADD COLUMN tenant TEXT NOT NULL DEFAULT 'default'",
+        "ALTER TABLE feedback    ADD COLUMN tenant TEXT NOT NULL DEFAULT 'default'",
+        "ALTER TABLE mcp_pins    ADD COLUMN tenant TEXT NOT NULL DEFAULT 'default'",
+        "ALTER TABLE mcp_changes ADD COLUMN tenant TEXT NOT NULL DEFAULT 'default'",
+        # Every tenant-scoped query filters on tenant first, so an index on
+        # it is load-bearing rather than speculative.
+        "CREATE INDEX IF NOT EXISTS idx_scan_events_tenant ON scan_events(tenant, id DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_approvals_tenant ON approvals(tenant, status)",
+        "CREATE INDEX IF NOT EXISTS idx_feedback_tenant ON feedback(tenant, verdict)",
+        "CREATE INDEX IF NOT EXISTS idx_mcp_pins_tenant ON mcp_pins(tenant, server)",
+        "CREATE INDEX IF NOT EXISTS idx_mcp_changes_tenant ON mcp_changes(tenant, acknowledged)",
+    ],
+))
+
+# Pins are identified PER TENANT, not globally.
+#
+# An earlier version of this migration left the old UNIQUE(server, tool_name)
+# index in place and described it as "harmless". That was wrong, and a test
+# caught it: the old index enforces global uniqueness, so two tenants that
+# both pin a server named 'kb' collide -- one silently overwrites the
+# other's baseline. That is exactly the unsafe partial isolation this
+# milestone exists to avoid.
+#
+# The old index must therefore go. DROP INDEX removes no data: it is a
+# schema object derived entirely from the rows, and rebuilding it loses
+# nothing. verify_non_destructive() is narrowed accordingly, with that
+# reasoning recorded there.
+MIGRATIONS.append((
+    5,
+    "tenant-scoped uniqueness for mcp pins",
+    [
+        "DROP INDEX IF EXISTS idx_mcp_pins_identity",
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_pins_tenant_identity "
+        "ON mcp_pins(tenant, server, tool_name)",
+    ],
+))
+
 LATEST_VERSION = max(v for v, _, _ in MIGRATIONS)
 
-_DESTRUCTIVE = re.compile(r"\b(DROP\s+(TABLE|COLUMN|INDEX)|TRUNCATE|DELETE\s+FROM)\b", re.I)
+# DROP INDEX is deliberately NOT in this list. An index is a derived
+# structure: dropping one removes no rows and rebuilding it loses nothing,
+# whereas DROP TABLE and DROP COLUMN destroy data irrecoverably. The rule
+# exists to prevent data loss, not schema change, and conflating the two
+# forced a real correctness fix (tenant-scoped pin uniqueness) to be
+# avoided rather than made.
+_DESTRUCTIVE = re.compile(r"\b(DROP\s+(TABLE|COLUMN)|TRUNCATE|DELETE\s+FROM)\b", re.I)
 
 
 def verify_non_destructive() -> list[str]:

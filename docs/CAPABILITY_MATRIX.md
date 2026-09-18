@@ -30,6 +30,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Agent-trace benchmark + 11-config ablation | `scripts/run_ablation.py`, `docs/research/README.md` Findings 1-5. **Underpowered: bootstrap CIs span ~±18pp, no ablation difference is statistically significant at n=22** |
 | Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). **RUN against a live API**: precision 97.44% recall 55.07% FPR 1.25% on the held-out split -- lower recall than the TF-IDF classifier's 72.0%. See Finding 6 |
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
+| Identity + tenant isolation (SQLite) | `tests/unit/test_tenancy.py` -- 16 tests. Found a real isolation bug: a leftover global unique index let one tenant overwrite another's MCP baseline |
+| Tenant scoping on PostgreSQL | **NOT IMPLEMENTED** -- do not run multi-tenant on the PostgreSQL backend |
 | Operator dashboard (4 tabs, action surfaces for approvals/MCP/feedback) | `tests/unit/test_dashboard.py` -- 12 tests incl. XSS regression, CSP enforcement, and a check that every subsystem is reachable |
 | MCP definition pinning / rug-pull detection | `tests/unit/test_mcp_pinning.py` -- 22 tests. Found and fixed a bug where an unpinned server reported every tool as changed |
 | Pre-deployment assessment (`sentinel assess`) | `tests/unit/test_assess.py` -- 23 tests. Found and fixed a word-boundary bug that missed snake_case tool names, the dominant convention |

@@ -20,11 +20,14 @@ router = APIRouter()
 class ApprovalDecision(BaseModel):
     approved: bool
     decided_by: str = Field(
-        ...,
+        "",
         description=(
-            "Identifier of the deciding human. UNVERIFIED -- this project has no "
-            "identity system to bind it to, so it is an audit annotation, not an "
-            "authenticated claim. Stated plainly rather than implied to be stronger."
+            "IGNORED. The deciding principal is taken from the authenticated "
+            "credential, not from the request body. Previously this was a "
+            "self-asserted string, which meant the audit trail recorded a claim "
+            "rather than a fact -- and an approval record whose 'who' can be "
+            "forged is not an approval record. Kept in the schema so existing "
+            "callers do not break."
         ),
     )
     reason: str = ""
@@ -45,8 +48,11 @@ def get_one(approval_id: str):
 
 @router.post("/approvals/{approval_id}/decide", dependencies=[Depends(require_role(Role.ADMIN))])
 def decide(approval_id: str, decision: ApprovalDecision):
+    from sentinelcore.core.identity import current
+
+    # Authenticated identity wins over anything the caller claims.
     record, applied = approvals.decide(
-        approval_id, decision.approved, decision.decided_by, decision.reason
+        approval_id, decision.approved, current().principal_id, decision.reason
     )
     if record is None:
         raise HTTPException(status_code=404, detail="No such approval.")
