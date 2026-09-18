@@ -1,10 +1,14 @@
 name: CI
 
+# Both names are listed deliberately. The local default branch is `master`
+# and this file previously triggered only on `main`, so every push ran zero
+# checks and the absence of a red X looked like a green build. Listing both
+# makes the trigger independent of which name the remote ended up with.
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   test:
