@@ -123,3 +123,95 @@ def test_health_redacts_credentials(store):
     h = store.health()
     assert "***" in h["location"] or "@" not in h["location"]
     assert PG_URL.split("@")[0].split(":")[-1] not in str(h), "password leaked into health output"
+
+
+# --- tenant isolation parity --------------------------------------------
+#
+# The SQLite backend was tenant-scoped a commit before PostgreSQL was.
+# These assert the two backends now have the SAME security properties --
+# an abstraction whose implementations differ in isolation behaviour is
+# worse than no abstraction, because callers cannot reason about it.
+
+ACME = None
+GLOBEX = None
+
+
+def _principals():
+    from sentinelcore.core.identity import Principal
+
+    return Principal("alice@acme", "acme", "admin"), Principal("bob@globex", "globex", "admin")
+
+
+def test_audit_events_do_not_cross_tenants(store):
+    from sentinelcore.core.identity import acting_as
+    from sentinelcore.storage.base import QueryFilters
+
+    acme, globex = _principals()
+    with acting_as(acme):
+        store.write_scan_event("pg-acme", "scan", 60, "block", [])
+    with acting_as(globex):
+        store.write_scan_event("pg-globex", "scan", 60, "block", [])
+        ids = [e["scan_id"] for e in store.recent_scan_events(QueryFilters(limit=50))]
+    assert "pg-globex" in ids and "pg-acme" not in ids
+
+
+def test_counts_are_tenant_scoped(store):
+    from sentinelcore.core.identity import acting_as
+
+    acme, globex = _principals()
+    with acting_as(acme):
+        for i in range(3):
+            store.write_scan_event(f"c{i}", "scan", 0, "allow", [])
+        assert store.count_scan_events() == 3
+    with acting_as(globex):
+        assert store.count_scan_events() == 0
+
+
+def test_another_tenant_cannot_decide_an_approval(store):
+    from sentinelcore.core.identity import acting_as
+
+    acme, globex = _principals()
+    with acting_as(acme):
+        store.create_approval("pg-ap", "s", "payment.transfer", "d", 90,
+                              "2026-01-01T00:00:00+00:00", "2099-01-01T00:00:00+00:00")
+    with acting_as(globex):
+        assert store.get_approval("pg-ap", "2026-06-01T00:00:00+00:00") is None
+        _, applied = store.decide_approval("pg-ap", True, "bob", "", "2026-06-01T00:00:00+00:00")
+        assert applied is False, "another tenant approved a privileged action"
+    with acting_as(acme):
+        assert store.get_approval("pg-ap", "2026-06-01T00:00:00+00:00")["status"] == "pending"
+
+
+def test_same_server_name_in_two_tenants_is_independent(store):
+    """The bug that shipped on SQLite: a global unique index let one tenant
+    overwrite another's MCP baseline."""
+    from sentinelcore.core.identity import acting_as
+
+    acme, globex = _principals()
+    with acting_as(acme):
+        store.upsert_mcp_pin("p1", "kb", "search", "fp-acme", "{}", "2026-01-01T00:00:00+00:00")
+    with acting_as(globex):
+        store.upsert_mcp_pin("p2", "kb", "search", "fp-globex", "{}", "2026-01-01T00:00:00+00:00")
+        assert store.list_mcp_pins("kb")[0]["fingerprint"] == "fp-globex"
+    with acting_as(acme):
+        pins = store.list_mcp_pins("kb")
+        assert len(pins) == 1 and pins[0]["fingerprint"] == "fp-acme", (
+            "another tenant overwrote this tenant's pin baseline"
+        )
+
+
+def test_retention_only_deletes_the_acting_tenants_data(store):
+    from sentinelcore.core.identity import acting_as
+    from sentinelcore.storage.base import RetentionPolicy
+
+    acme, globex = _principals()
+    with acting_as(acme):
+        for i in range(5):
+            store.write_scan_event(f"keep{i}", "scan", 0, "allow", [])
+    with acting_as(globex):
+        for i in range(5):
+            store.write_scan_event(f"del{i}", "scan", 0, "allow", [])
+        store.apply_retention(RetentionPolicy(audit_days=3650, max_audit_rows=1))
+        assert store.count_scan_events() == 1
+    with acting_as(acme):
+        assert store.count_scan_events() == 5, "retention crossed a tenant boundary"

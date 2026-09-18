@@ -32,6 +32,7 @@ import logging
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
+from sentinelcore.core.identity import current_tenant
 from sentinelcore.storage.base import QueryFilters, RetentionPolicy, Store
 from sentinelcore.storage.migrations import LATEST_VERSION, pending
 
@@ -178,9 +179,11 @@ class PostgresStore(Store):
         try:
             self._exec(
                 "INSERT INTO scan_events (scan_id, timestamp, endpoint, detail, risk_score, "
-                "decision, finding_count, findings_summary) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                "decision, finding_count, findings_summary, tenant) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (scan_id, datetime.now(timezone.utc).isoformat(), endpoint, detail,
-                 risk_score, decision, len(findings_summary), json.dumps(findings_summary)))
+                 risk_score, decision, len(findings_summary), json.dumps(findings_summary),
+                 current_tenant()))
             self.stats.writes += 1
             return True
         except Exception as e:
@@ -190,9 +193,12 @@ class PostgresStore(Store):
             return False
 
     def recent_scan_events(self, filters: QueryFilters) -> list[dict]:
+        # Predicate in the LITERAL SQL, not appended at runtime, so the static
+        # check in test_tenancy.py can verify it -- same reasoning as the
+        # SQLite backend.
         sql = ("SELECT scan_id, timestamp, endpoint, detail, risk_score, decision, "
-               "finding_count, findings_summary FROM scan_events")
-        where, params = [], []
+               "finding_count, findings_summary FROM scan_events WHERE tenant = %s")
+        where, params = [], [current_tenant()]
         if filters.decision:
             where.append("decision = %s"); params.append(filters.decision)
         if filters.endpoint:
@@ -200,7 +206,7 @@ class PostgresStore(Store):
         if filters.since:
             where.append("timestamp >= %s"); params.append(filters.since)
         if where:
-            sql += " WHERE " + " AND ".join(where)
+            sql += " AND " + " AND ".join(where)
         sql += " ORDER BY id DESC LIMIT %s OFFSET %s"
         params += [filters.limit, filters.offset]
         try:
@@ -219,7 +225,8 @@ class PostgresStore(Store):
 
     def count_scan_events(self) -> int:
         try:
-            row, _ = self._exec("SELECT COUNT(*) FROM scan_events", fetch="one")
+            row, _ = self._exec("SELECT COUNT(*) FROM scan_events WHERE tenant = %s",
+                                (current_tenant(),), fetch="one")
             return row[0]
         except Exception:
             return -1
@@ -230,9 +237,10 @@ class PostgresStore(Store):
                         risk_score, created_at, expires_at) -> bool:
         try:
             self._exec("INSERT INTO approvals (id, scan_id, tool_name, arguments_digest, risk_score, "
-                       "created_at, expires_at, status) VALUES (%s,%s,%s,%s,%s,%s,%s,'pending')",
+                       "created_at, expires_at, status, tenant) "
+                       "VALUES (%s,%s,%s,%s,%s,%s,%s,'pending',%s)",
                        (approval_id, scan_id, tool_name, arguments_digest, risk_score,
-                        created_at, expires_at))
+                        created_at, expires_at, current_tenant()))
             self.stats.writes += 1
             return True
         except Exception:
@@ -241,19 +249,21 @@ class PostgresStore(Store):
 
     def get_approval(self, approval_id, now_iso) -> dict | None:
         try:
-            self._exec("UPDATE approvals SET status='expired' WHERE status='pending' AND expires_at < %s",
-                       (now_iso,))
-            row, cols = self._exec("SELECT * FROM approvals WHERE id = %s", (approval_id,), fetch="one")
+            self._exec("UPDATE approvals SET status='expired' WHERE status='pending' "
+                       "AND expires_at < %s AND tenant = %s", (now_iso, current_tenant()))
+            row, cols = self._exec("SELECT * FROM approvals WHERE id = %s AND tenant = %s",
+                                   (approval_id, current_tenant()), fetch="one")
             return dict(zip(cols, row)) if row else None
         except Exception:
             return None
 
     def list_pending_approvals(self, now_iso, limit) -> list[dict]:
         try:
-            self._exec("UPDATE approvals SET status='expired' WHERE status='pending' AND expires_at < %s",
-                       (now_iso,))
+            self._exec("UPDATE approvals SET status='expired' WHERE status='pending' "
+                       "AND expires_at < %s AND tenant = %s", (now_iso, current_tenant()))
             rows, cols = self._exec("SELECT * FROM approvals WHERE status='pending' "
-                                    "ORDER BY created_at DESC LIMIT %s", (limit,), fetch="all")
+                                    "AND tenant = %s ORDER BY created_at DESC LIMIT %s",
+                                    (current_tenant(), limit), fetch="all")
             return [dict(zip(cols, r)) for r in rows or []]
         except Exception:
             return []
@@ -264,13 +274,16 @@ class PostgresStore(Store):
             with self._get_pool().connection() as conn:
                 try:
                     with conn.cursor() as cur:
-                        cur.execute("UPDATE approvals SET status='expired' "
-                                    "WHERE status='pending' AND expires_at < %s", (now_iso,))
+                        cur.execute("UPDATE approvals SET status='expired' WHERE status='pending' "
+                                    "AND expires_at < %s AND tenant = %s",
+                                    (now_iso, current_tenant()))
                         cur.execute("UPDATE approvals SET status=%s, decided_at=%s, decided_by=%s, "
-                                    "reason=%s WHERE id=%s AND status='pending'",
-                                    (status, now_iso, decided_by, reason, approval_id))
+                                    "reason=%s WHERE id=%s AND status='pending' AND tenant=%s",
+                                    (status, now_iso, decided_by, reason, approval_id,
+                                     current_tenant()))
                         applied = cur.rowcount > 0
-                        cur.execute("SELECT * FROM approvals WHERE id = %s", (approval_id,))
+                        cur.execute("SELECT * FROM approvals WHERE id = %s AND tenant = %s",
+                                    (approval_id, current_tenant()))
                         row = cur.fetchone()
                         cols = [d[0] for d in cur.description]
                     conn.commit()
@@ -286,8 +299,9 @@ class PostgresStore(Store):
     def write_feedback(self, feedback_id, scan_id, verdict, note, submitted_by, submitted_at) -> bool:
         try:
             self._exec("INSERT INTO feedback (id, scan_id, verdict, note, submitted_by, "
-                       "submitted_at, text_supplied) VALUES (%s,%s,%s,%s,%s,%s,0)",
-                       (feedback_id, scan_id, verdict, note, submitted_by, submitted_at))
+                       "submitted_at, text_supplied, tenant) VALUES (%s,%s,%s,%s,%s,%s,0,%s)",
+                       (feedback_id, scan_id, verdict, note, submitted_by, submitted_at,
+                        current_tenant()))
             self.stats.writes += 1
             return True
         except Exception:
@@ -296,8 +310,9 @@ class PostgresStore(Store):
 
     def attach_feedback_text(self, feedback_id, text) -> bool:
         try:
-            rc, _ = self._exec("UPDATE feedback SET text=%s, text_supplied=1 WHERE id=%s",
-                               (text, feedback_id), fetch="rowcount")
+            rc, _ = self._exec("UPDATE feedback SET text=%s, text_supplied=1 "
+                               "WHERE id=%s AND tenant=%s",
+                               (text, feedback_id, current_tenant()), fetch="rowcount")
             return bool(rc)
         except Exception:
             return False
@@ -305,19 +320,21 @@ class PostgresStore(Store):
     def list_feedback(self, verdict, limit) -> list[dict]:
         try:
             if verdict:
-                rows, cols = self._exec("SELECT * FROM feedback WHERE verdict=%s "
+                rows, cols = self._exec("SELECT * FROM feedback WHERE verdict=%s AND tenant=%s "
                                         "ORDER BY submitted_at DESC LIMIT %s",
-                                        (verdict, limit), fetch="all")
+                                        (verdict, current_tenant(), limit), fetch="all")
             else:
-                rows, cols = self._exec("SELECT * FROM feedback ORDER BY submitted_at DESC LIMIT %s",
-                                        (limit,), fetch="all")
+                rows, cols = self._exec("SELECT * FROM feedback WHERE tenant=%s "
+                                        "ORDER BY submitted_at DESC LIMIT %s",
+                                        (current_tenant(), limit), fetch="all")
             return [dict(zip(cols, r)) for r in rows or []]
         except Exception:
             return []
 
     def feedback_counts(self) -> dict[str, int]:
         try:
-            rows, _ = self._exec("SELECT verdict, COUNT(*) FROM feedback GROUP BY verdict", fetch="all")
+            rows, _ = self._exec("SELECT verdict, COUNT(*) FROM feedback WHERE tenant=%s "
+                                 "GROUP BY verdict", (current_tenant(),), fetch="all")
             return {r[0]: r[1] for r in rows or []}
         except Exception:
             return {}
@@ -328,11 +345,13 @@ class PostgresStore(Store):
         try:
             self._exec(
                 "INSERT INTO mcp_pins (id, server, tool_name, fingerprint, definition, "
-                "first_seen, last_verified, status) VALUES (%s,%s,%s,%s,%s,%s,%s,'pinned') "
-                "ON CONFLICT (server, tool_name) DO UPDATE SET "
+                "first_seen, last_verified, status, tenant) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,'pinned',%s) "
+                "ON CONFLICT (tenant, server, tool_name) DO UPDATE SET "
                 "fingerprint=EXCLUDED.fingerprint, definition=EXCLUDED.definition, "
                 "last_verified=EXCLUDED.last_verified",
-                (pin_id, server, tool_name, fingerprint, definition, now_iso, now_iso))
+                (pin_id, server, tool_name, fingerprint, definition, now_iso, now_iso,
+                 current_tenant()))
             self.stats.writes += 1
             return True
         except Exception:
@@ -342,10 +361,12 @@ class PostgresStore(Store):
     def list_mcp_pins(self, server=None) -> list[dict]:
         try:
             if server:
-                rows, cols = self._exec("SELECT * FROM mcp_pins WHERE server=%s ORDER BY tool_name",
-                                        (server,), fetch="all")
+                rows, cols = self._exec("SELECT * FROM mcp_pins WHERE server=%s AND tenant=%s "
+                                        "ORDER BY tool_name", (server, current_tenant()),
+                                        fetch="all")
             else:
-                rows, cols = self._exec("SELECT * FROM mcp_pins ORDER BY server, tool_name",
+                rows, cols = self._exec("SELECT * FROM mcp_pins WHERE tenant=%s "
+                                        "ORDER BY server, tool_name", (current_tenant(),),
                                         fetch="all")
             return [dict(zip(cols, r)) for r in rows or []]
         except Exception:
@@ -355,11 +376,11 @@ class PostgresStore(Store):
         try:
             self._exec(
                 "INSERT INTO mcp_changes (id, server, tool_name, change_type, severity, "
-                "detected_at, old_fingerprint, new_fingerprint, summary, acknowledged) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,0)",
+                "detected_at, old_fingerprint, new_fingerprint, summary, acknowledged, tenant) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,0,%s)",
                 (change_id, ch["server"], ch["tool_name"], ch["change_type"], ch["severity"],
                  ch["detected_at"], ch.get("old_fingerprint"), ch.get("new_fingerprint"),
-                 ch["summary"]))
+                 ch["summary"], current_tenant()))
             self.stats.writes += 1
             return True
         except Exception:
@@ -369,12 +390,14 @@ class PostgresStore(Store):
     def list_mcp_changes(self, acknowledged=None, limit=100) -> list[dict]:
         try:
             if acknowledged is None:
-                rows, cols = self._exec("SELECT * FROM mcp_changes ORDER BY detected_at DESC "
-                                        "LIMIT %s", (limit,), fetch="all")
+                rows, cols = self._exec("SELECT * FROM mcp_changes WHERE tenant=%s "
+                                        "ORDER BY detected_at DESC LIMIT %s",
+                                        (current_tenant(), limit), fetch="all")
             else:
                 rows, cols = self._exec("SELECT * FROM mcp_changes WHERE acknowledged=%s "
-                                        "ORDER BY detected_at DESC LIMIT %s",
-                                        (1 if acknowledged else 0, limit), fetch="all")
+                                        "AND tenant=%s ORDER BY detected_at DESC LIMIT %s",
+                                        (1 if acknowledged else 0, current_tenant(), limit),
+                                        fetch="all")
             return [dict(zip(cols, r)) for r in rows or []]
         except Exception:
             return []
@@ -382,7 +405,8 @@ class PostgresStore(Store):
     def acknowledge_mcp_change(self, change_id) -> bool:
         try:
             rc, _ = self._exec("UPDATE mcp_changes SET acknowledged=1 WHERE id=%s AND "
-                               "acknowledged=0", (change_id,), fetch="rowcount")
+                               "acknowledged=0 AND tenant=%s",
+                               (change_id, current_tenant()), fetch="rowcount")
             return bool(rc)
         except Exception:
             return False
@@ -400,14 +424,15 @@ class PostgresStore(Store):
                                      ("feedback", policy.feedback_days, "submitted_at"),
                                      ("approvals", policy.approvals_days, "created_at")):
                 cutoff = (now - timedelta(days=days)).isoformat()
-                rc, _ = self._exec(f"DELETE FROM {table} WHERE {col} < %s", (cutoff,), fetch="rowcount")
+                rc, _ = self._exec(f"DELETE FROM {table} WHERE {col} < %s AND tenant = %s",
+                                   (cutoff, current_tenant()), fetch="rowcount")
                 deleted[table] = rc or 0
             total = self.count_scan_events()
             if policy.max_audit_rows and total > policy.max_audit_rows:
                 rc, _ = self._exec(
                     "DELETE FROM scan_events WHERE id IN "
-                    "(SELECT id FROM scan_events ORDER BY id ASC LIMIT %s)",
-                    (total - policy.max_audit_rows,), fetch="rowcount")
+                    "(SELECT id FROM scan_events WHERE tenant = %s ORDER BY id ASC LIMIT %s)",
+                    (current_tenant(), total - policy.max_audit_rows), fetch="rowcount")
                 deleted["scan_events_overflow"] = rc or 0
             self.stats.retention_runs += 1
             self.stats.rows_deleted += sum(deleted.values())

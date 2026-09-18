@@ -52,7 +52,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **10. Continuous monitoring. — DONE (polling is manual).** Fingerprint pinning with change detection for MCP tool definitions: `sentinel mcp pin/check/changes`, API endpoints, durable change history (schema v3), alert integration, CI exit codes. Scheduled polling is **PLANNED** — this package has no scheduler, so run `sentinel mcp check` from cron or CI. See `docs/MCP_PINNING.md`.
 
-**11. Multi-agent / multi-tenant. — PARTIAL (SQLite only).** Identity model derived from the presented credential, ambient tenant scoping enforced by a static test over the backend source, and `decided_by` now taken from the authenticated principal rather than self-asserted. **PostgreSQL is not yet tenant-scoped — do not run multi-tenant on it.** See `docs/TENANCY.md`.
+**11. Multi-agent / multi-tenant. — PARTIAL (SQLite only).** Identity model derived from the presented credential, ambient tenant scoping enforced by a static test over the backend source, and `decided_by` now taken from the authenticated principal rather than self-asserted. PostgreSQL is now scoped identically and the static check covers both backends, though its 13 integration tests skip without a live server. See `docs/TENANCY.md`.
 
 ## P3 — Research-dependent, deliberately last
 

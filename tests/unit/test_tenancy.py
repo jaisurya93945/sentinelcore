@@ -171,41 +171,72 @@ def test_decided_by_comes_from_the_credential_not_the_body(monkeypatch):
 
 # --- the control that keeps this true -----------------------------------
 
-def test_every_query_on_a_tenant_scoped_table_carries_a_tenant_predicate():
-    """THE load-bearing test.
+BACKENDS = ("sqlite_backend.py", "postgres_backend.py")
+
+
+def _statements(filename: str, verbs: str):
+    src = (Path(__file__).parent.parent.parent / "sentinelcore" / "storage" / filename).read_text()
+    # Collapse the implicit string concatenation used to build SQL.
+    flat = re.sub(r'"\s*\n\s*"', "", src)
+    return re.findall(rf'"((?:{verbs})[^"]*)"', flat, re.I)
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_every_query_on_a_tenant_scoped_table_carries_a_tenant_predicate(backend):
+    """THE load-bearing test, and it runs against BOTH backends.
 
     Tenant is ambient rather than a parameter precisely so a call site
     cannot omit it -- but nothing stops someone writing a new SELECT that
     forgets the predicate. This parses the backend source and fails on any
-    statement touching a tenant-scoped table without one, so the boundary
-    holds as the code grows instead of decaying quietly.
-    """
-    src = (Path(__file__).parent.parent.parent / "sentinelcore" / "storage"
-           / "sqlite_backend.py").read_text()
-    # Collapse the implicit string concatenation used to build SQL.
-    flat = re.sub(r'"\s*\n\s*"', "", src)
-    statements = re.findall(r'"((?:SELECT|UPDATE|DELETE)[^"]*)"', flat, re.I)
+    statement touching a tenant-scoped table without one.
 
+    Parametrised over both backends deliberately: the first version of this
+    check covered SQLite only, and PostgreSQL shipped completely unscoped
+    underneath it. An abstraction whose two implementations have DIFFERENT
+    security properties is the worst state for an abstraction to be in,
+    because callers cannot reason about it at all.
+    """
     offenders = []
-    for stmt in statements:
-        table_hit = any(re.search(rf"\b(FROM|UPDATE|INTO)\s+{t}\b", stmt, re.I)
-                        for t in TENANT_SCOPED_TABLES)
-        if not table_hit:
+    for stmt in _statements(backend, "SELECT|UPDATE|DELETE"):
+        if not any(re.search(rf"\b(FROM|UPDATE|INTO)\s+{t}\b", stmt, re.I)
+                   for t in TENANT_SCOPED_TABLES):
             continue
         if not re.search(r"\btenant\s*=", stmt, re.I):
             offenders.append(stmt[:100])
     assert not offenders, (
-        "queries on tenant-scoped tables without a tenant predicate:\n  " + "\n  ".join(offenders)
+        f"{backend}: queries on tenant-scoped tables without a tenant predicate:\n  "
+        + "\n  ".join(offenders)
     )
 
 
-def test_writes_include_the_tenant_column():
-    src = (Path(__file__).parent.parent.parent / "sentinelcore" / "storage"
-           / "sqlite_backend.py").read_text()
-    flat = re.sub(r'"\s*\n\s*"', "", src)
-    for stmt in re.findall(r'"(INSERT INTO[^"]*)"', flat, re.I):
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_writes_include_the_tenant_column(backend):
+    for stmt in _statements(backend, "INSERT INTO"):
         if any(re.search(rf"\bINTO\s+{t}\b", stmt, re.I) for t in TENANT_SCOPED_TABLES):
-            assert "tenant" in stmt.lower(), f"insert without tenant: {stmt[:90]}"
+            assert "tenant" in stmt.lower(), f"{backend}: insert without tenant: {stmt[:90]}"
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_backend_imports_the_ambient_tenant(backend):
+    """A backend that never imports current_tenant cannot be scoping
+    anything, whatever its SQL looks like."""
+    src = (Path(__file__).parent.parent.parent / "sentinelcore" / "storage" / backend).read_text()
+    assert "current_tenant" in src, f"{backend} does not use the ambient tenant"
+
+
+def test_both_backends_implement_the_same_interface():
+    """Parity is a security property here, not tidiness: a method present on
+    one backend and missing on the other means behaviour silently changes
+    with configuration."""
+    from sentinelcore.storage.base import Store
+    from sentinelcore.storage.postgres_backend import PostgresStore
+    from sentinelcore.storage.sqlite_backend import SQLiteStore
+
+    required = {n for n in dir(Store) if not n.startswith("_")
+                and getattr(getattr(Store, n), "__isabstractmethod__", False)}
+    for impl in (SQLiteStore, PostgresStore):
+        missing = {m for m in required if getattr(getattr(impl, m, None), "__isabstractmethod__", False)}
+        assert not missing, f"{impl.__name__} leaves abstract: {missing}"
 
 
 def test_no_principal_bound_falls_back_to_the_default_tenant():
