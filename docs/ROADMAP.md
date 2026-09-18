@@ -58,7 +58,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **12. Stateful session security and the action graph.** Real, valuable, and correctly deferred: Findings 5–9 show the policy layer is bounded by detector signal quality. Adding session state on top of a detector whose confidence has no usable middle would optimise the layer that is not the bottleneck.
 
-**13. Adaptive-attack evaluation.** Everything measured so far is against static corpora. No claim about robustness is currently supportable.
+**13. Adaptive-attack evaluation. — DONE (synthetic; live-agent still absent).** `sentinelcore/redteam/` + `scripts/run_adaptive_eval.py`: 8 reproducible transform families across attacker tiers B/C/E, enforced preservation classes, attribution control for transform-added signal, benign controls, seeded and commit-stamped results. Tier E: rules 15.8% evasion, rules+learned 0%. **Robustness is still NOT claimed** -- see `docs/ADAPTIVE_EVAL.md`.
 
 ---
 

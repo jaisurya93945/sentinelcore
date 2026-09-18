@@ -34,6 +34,8 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Tenant scoping on PostgreSQL | **IMPLEMENTED, NOT INTEGRATION-TESTED** -- identical scoping, static check covers both backends, 13 integration tests skip without a live server |
 | Operator dashboard (4 tabs, action surfaces for approvals/MCP/feedback) | `tests/unit/test_dashboard.py` -- 12 tests incl. XSS regression, CSP enforcement, and a check that every subsystem is reachable |
 | MCP definition pinning / rug-pull detection | `tests/unit/test_mcp_pinning.py` -- 22 tests. Found and fixed a bug where an unpinned server reported every tool as changed |
+| Adaptive-attack harness (8 transform families, tier-E composition search) | `tests/unit/test_redteam.py` -- 15 tests incl. enforced preservation round-trips and separation from enforcement. Found and fixed a case-destroying bug in my own homoglyph transform |
+| Robustness against adaptive attackers | **NOT CLAIMED** -- 8 hand-written families at budget 40, mostly targeting obfuscation classes the detector was built for. See `docs/ADAPTIVE_EVAL.md` limitations |
 | Pre-deployment assessment (`sentinel assess`) | `tests/unit/test_assess.py` -- 23 tests. Found and fixed a word-boundary bug that missed snake_case tool names, the dominant convention |
 | Storage abstraction, versioned migrations, WAL SQLite, retention | `tests/unit/test_storage.py` -- 24 tests incl. legacy-schema upgrade preserving rows, 600 concurrent writes with none lost, exactly-one-decider under 10 concurrent deciders |
 | PostgreSQL backend | **IMPLEMENTED, NOT INTEGRATION-TESTED** -- 8 tests skip without `SENTINELCORE_TEST_POSTGRES_URL`; no server was reachable in the dev environment. HA is NOT claimed |
