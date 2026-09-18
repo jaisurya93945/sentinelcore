@@ -1,5 +1,16 @@
 [project]
-name = "sentinelcore"
+# DISTRIBUTION name (what `pip install` takes) -- deliberately NOT the same
+# as the import name below. PyPI refused `sentinelcore`: an unrelated
+# project `sentinel-core` already exists, and PyPI's similarity check
+# deletes . _ - and folds l/I/1 and O/0 before comparing, so the two
+# collapse to the same string and the shorter name cannot be registered by
+# anyone. TestPyPI accepted it only because `sentinel-core` is not in
+# TestPyPI's separate database.
+#
+# The import name stays `sentinelcore` (see tool.setuptools below), so
+# every line of code, doc and example is unaffected:
+#     pip install sentinelcore-ai   ->   import sentinelcore
+name = "sentinelcore-ai"
 version = "0.4.0"
 description = "A security control plane for LLM and agent applications: detection, provenance, risk, authorization, policy and enforcement."
 readme = "README.md"
@@ -33,7 +44,9 @@ semantic = ["openai>=1.40.0"]
 postgres = ["psycopg[binary]>=3.1.0", "psycopg-pool>=3.2.0"]
 dev = ["pytest>=8.0.0", "pytest-cov>=4.1.0", "httpx>=0.27.0", "respx>=0.21.0",
        "fastapi>=0.110.0", "uvicorn[standard]>=0.29.0"]
-all = ["sentinelcore[server,ml,semantic,postgres]"]
+# Self-reference resolves through PyPI, so it must use the DISTRIBUTION
+# name. `sentinelcore[...]` here would be an unresolvable dependency.
+all = ["sentinelcore-ai[server,ml,semantic,postgres]"]
 
 [project.scripts]
 sentinel = "sentinelcore.cli:main"
@@ -42,6 +55,8 @@ sentinel = "sentinelcore.cli:main"
 Homepage = "https://github.com/jaisurya93945/sentinelcore"
 Documentation = "https://github.com/jaisurya93945/sentinelcore/tree/main/docs"
 
+# IMPORT name. Unchanged on purpose -- it is the public API surface and
+# renaming it would break every user, doc and example for no benefit.
 [tool.setuptools.packages.find]
 include = ["sentinelcore*"]
 

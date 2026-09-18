@@ -107,3 +107,69 @@ def test_runtime_version_matches_the_package():
 
     declared = tomllib.load(open(ROOT / "pyproject.toml", "rb"))["project"]["version"]
     assert settings.version == sentinelcore.__version__ == declared
+
+
+# --- distribution name vs import name -----------------------------------
+#
+# These differ ON PURPOSE. PyPI refuses the distribution name `sentinelcore`
+# because an unrelated project `sentinel-core` already exists and PyPI's
+# similarity check deletes . _ - and folds l/I/1 and O/0 before comparing,
+# so both collapse to the same string. The import name is unaffected and
+# stays `sentinelcore`. The tests below stop that divergence from silently
+# breaking things a human would only notice at install time.
+
+def _pyproject():
+    import tomllib
+
+    return tomllib.load(open(ROOT / "pyproject.toml", "rb"))
+
+
+def test_the_all_extra_self_references_the_distribution_name():
+    """THE subtle one. `all` is a self-referential extra, resolved through
+    PyPI by distribution name. If someone renames `project.name` and leaves
+    this line alone, everything still builds, every test still passes, and
+    `pip install <dist>[all]` fails for users with an unresolvable
+    dependency -- a defect that only appears after the version is published
+    and immutable."""
+    cfg = _pyproject()
+    dist = cfg["project"]["name"]
+    all_extra = cfg["project"]["optional-dependencies"]["all"]
+    for spec in all_extra:
+        base = spec.split("[")[0].strip()
+        assert base == dist, (
+            f"the 'all' extra requires {base!r} but this distribution is "
+            f"{dist!r}; pip install '{dist}[all]' would not resolve"
+        )
+
+
+def test_import_name_is_not_assumed_equal_to_the_distribution_name():
+    """The package directory, the package-data key and the console script
+    target all key off the IMPORT name. A rename of the distribution must
+    not drag them along."""
+    cfg = _pyproject()
+    assert (ROOT / "sentinelcore" / "__init__.py").exists()
+    assert "sentinelcore" in cfg["tool"]["setuptools"]["package-data"]
+    assert cfg["project"]["scripts"]["sentinel"].startswith("sentinelcore.")
+
+
+def test_install_instructions_use_the_distribution_name():
+    """A README that tells people to `pip install <import name>` sends them
+    to a different project -- here, literally someone else's.
+
+    SOURCE FILES ARE SCANNED TOO, and that is not padding. The first version
+    of this test read only *.md and passed, while `sentinel doctor` went on
+    printing `pip install 'sentinelcore[server]'` to every user who ran it --
+    the most likely place anyone would actually read an install hint. The
+    docs were right and the program was wrong."""
+    import re
+
+    dist = _pyproject()["project"]["name"]
+    bad = re.compile(r"pip install '?sentinelcore(?!-ai)(\[|['\s]|$)")
+    targets = [ROOT / "README.md", *(ROOT / "docs").rglob("*.md"),
+               *(ROOT / "sentinelcore").rglob("*.py")]
+    for f in targets:
+        for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+            assert not bad.search(line), (
+                f"{f.relative_to(ROOT)}:{i} installs 'sentinelcore', but the "
+                f"distribution is '{dist}': {line.strip()}"
+            )

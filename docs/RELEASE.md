@@ -1,6 +1,23 @@
 # Releasing to PyPI
 
-**`sentinelcore` is available on PyPI** (checked against the index). Note that **`sentinel-core` is taken by an unrelated project** — a hyphen typo lands a user on someone else's package, which is worth knowing for a security tool.
+## The distribution name is not the import name
+
+```
+pip install sentinelcore-ai        →        import sentinelcore
+```
+
+**PyPI refuses the name `sentinelcore`.** An unrelated project, [`sentinel-core`](https://pypi.org/project/sentinel-core/) (a RAG knowledge-graph library, 8 releases, Nov 2025 – Jan 2026), already exists, and PyPI's similarity check compares names after deleting `.` `_` `-` and folding the confusable characters `l`/`I`/`1` and `O`/`0`. Both names collapse to `sentlnelcore`, so the form is rejected with *"This project name is too similar to an existing project."*
+
+This is stricter than PEP 503 normalization, which only collapses runs of `-_.` into a single `-`. Under PEP 503 alone the two names are distinct, which is why `pypi.org/simple/sentinelcore/` returns 404 — the name is **unregistered but unregisterable**, by anyone.
+
+**TestPyPI accepted `sentinelcore`, and that told us nothing.** TestPyPI is a separate database; `sentinel-core` is not in it, so there was no collision to detect. A name that works on TestPyPI can still be refused by PyPI, and a successful TestPyPI publish is not evidence about the real index.
+
+Two consequences worth remembering:
+
+- Since the import name is unchanged, no code, example or API changed. Only `project.name`, the self-referential `all` extra, and install instructions.
+- **A hyphen typo — `pip install sentinel-core` — installs someone else's package.** For a security tool that is worth stating in the README rather than discovering later.
+
+`sentinelcore-ai` was verified available against the full PyPI index (894,169 projects) under the same ultranormalization rule, not just against the JSON API.
 
 ## The one thing that cannot be undone
 
@@ -19,13 +36,17 @@ The release workflow uses PyPI Trusted Publishing (OIDC). GitHub proves the work
 
    | Field | Value |
    |---|---|
-   | PyPI project name | `sentinelcore` |
+   | PyPI project name | `sentinelcore-ai` ← the **distribution** name |
    | Owner | `jaisurya93945` |
-   | Repository name | `sentinelcore` |
+   | Repository name | `sentinelcore` ← the **GitHub repo**, still unrenamed |
    | Workflow name | `release.yml` |
    | Environment name | `pypi` |
 
+   The first two rows differ on purpose and are the easiest thing here to get wrong.
+
 3. Repeat on **test.pypi.org** with environment name `testpypi`.
+
+   **A publisher created before the rename is stale.** It names the project `sentinelcore`, and the workflow now uploads `sentinelcore-ai` — a different project as far as the index is concerned — so the publish is rejected as unauthorized. Add a second pending publisher for `sentinelcore-ai`. The old one is harmless; a pending publisher reserves nothing and expires on its own.
 4. In GitHub: **Settings → Environments** → create `pypi` and `testpypi`. Add a required reviewer on `pypi` so a release cannot happen by accident.
 
 No secrets are added in either place. That is the point.
@@ -39,7 +60,7 @@ No secrets are added in either place. That is the point.
 # 2. Verify what you actually published, in a clean environment
 python -m venv /tmp/verify && /tmp/verify/bin/pip install \
   --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ sentinelcore
+  --extra-index-url https://pypi.org/simple/ sentinelcore-ai
 /tmp/verify/bin/python -c "import sentinelcore; print(sentinelcore.__version__)"
 /tmp/verify/bin/sentinel doctor
 

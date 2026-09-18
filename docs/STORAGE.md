@@ -16,7 +16,7 @@ SENTINELCORE_POSTGRES_POOL_MAX=10
 
 Backend selection is explicit and never inferred. A misconfigured backend **fails loudly at startup** rather than silently falling back to SQLite — a control plane quietly writing its audit trail somewhere other than where the operator configured it is the worse outcome.
 
-`pip install 'sentinelcore[postgres]'` for the PostgreSQL driver. It is not a base dependency.
+`pip install 'sentinelcore-ai[postgres]'` for the PostgreSQL driver. It is not a base dependency.
 
 ## Status
 

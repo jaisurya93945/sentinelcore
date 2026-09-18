@@ -54,10 +54,14 @@ Full implemented/experimental/planned breakdown, security gaps, and an honest "w
 ## Install
 
 ```bash
-pip install sentinelcore                # core: detection, risk, policy, enforcement
-pip install 'sentinelcore[server]'      # + the reverse-proxy gateway
-pip install 'sentinelcore[ml]'          # + the learned detector
+pip install sentinelcore-ai             # core: detection, risk, policy, enforcement
+pip install 'sentinelcore-ai[server]'   # + the reverse-proxy gateway
+pip install 'sentinelcore-ai[ml]'       # + the learned detector
 ```
+
+The package installs as `sentinelcore-ai` and imports as `sentinelcore`.
+PyPI would not accept the bare name: an unrelated project called
+`sentinel-core` already holds it under PyPI's name-similarity rule.
 
 ```python
 from sentinelcore import Guard

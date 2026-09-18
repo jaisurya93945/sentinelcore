@@ -82,7 +82,7 @@ class PostgresStore(Store):
                 from psycopg_pool import ConnectionPool
             except ImportError as e:
                 raise RuntimeError(
-                    "PostgreSQL backend requires: pip install 'sentinelcore[postgres]'"
+                    "PostgreSQL backend requires: pip install 'sentinelcore-ai[postgres]'"
                 ) from e
             self._pool = ConnectionPool(self.url, min_size=self._min_size,
                                         max_size=self._max_size, open=True)

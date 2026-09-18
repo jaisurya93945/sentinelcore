@@ -233,7 +233,7 @@ def _doctor(as_json: bool) -> int:
         print(f"sentinelcore {__version__}\n")
         for name, c in checks.items():
             mark = "ok " if c["ok"] else "-- "
-            hint = "" if c["ok"] or not c["extra"] else f"   (pip install 'sentinelcore[{c['extra']}]')"
+            hint = "" if c["ok"] or not c["extra"] else f"   (pip install 'sentinelcore-ai[{c['extra']}]')"
             print(f"  [{mark}] {name}{hint}")
         print(f"\n  registered detectors: {', '.join(detectors)}")
         if not checks["core"]["ok"]:

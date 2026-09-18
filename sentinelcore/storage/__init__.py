@@ -2,7 +2,7 @@
 Storage factory and process-wide store.
 
 Backend selection is explicit configuration, never inferred. SQLite stays
-the default so `pip install sentinelcore` works with no database to set up.
+the default so `pip install sentinelcore-ai` works with no database to set up.
 
     SENTINELCORE_STORAGE_BACKEND=sqlite            (default)
     SENTINELCORE_AUDIT_DB_PATH=./sentinelcore.db

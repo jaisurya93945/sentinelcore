@@ -17,7 +17,7 @@ Status as of `v0.4.0`: the package installs, imports, scans and ships a working 
 **`sentinelcore` is available on PyPI.** Note `sentinel-core` is taken by an unrelated project — a hyphen typo lands users on someone else's package. Release procedure: `docs/RELEASE.md`.
 
 
-**1. Ship a real Python package. — DONE.** `pip install sentinelcore`. Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify in a clean venv: `pip install dist/*.whl && python -c "import sentinelcore"`. **Do not publish to PyPI without explicit authorization.**
+**1. Ship a real Python package. — DONE.** `pip install sentinelcore-ai` (imports as `sentinelcore`). Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify in a clean venv: `pip install dist/*.whl && python -c "import sentinelcore"`. **Do not publish to PyPI without explicit authorization.**
 
 **2. A stable public API — DONE.** Three integration shapes, because developers arrive with different constraints:
 
