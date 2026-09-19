@@ -1,9 +1,10 @@
 name: CI
 
-# Both names are listed deliberately. The local default branch is `master`
-# and this file previously triggered only on `main`, so every push ran zero
-# checks and the absence of a red X looked like a green build. Listing both
-# makes the trigger independent of which name the remote ended up with.
+# Both branch names are listed deliberately. The local default branch is
+# `master` and this file previously triggered only on `main`, so every push
+# ran zero checks and the absence of a red X looked like a green build.
+# Listing both makes the trigger independent of which name the remote
+# settled on.
 on:
   push:
     branches: [main, master]
@@ -13,28 +14,67 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # Matches the release workflow. Testing only 3.11 here meant a
+      # 3.12/3.13 break was first seen by the release job -- the one moment
+      # you least want to discover it, since a PyPI version is immutable
+      # and cannot be re-uploaded after a bad publish.
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
+          python-version: ${{ matrix.python-version }}
+
+      # pyproject.toml is the single source of truth for dependencies. This
+      # job used to install requirements-dev.txt, which is a second,
+      # drifted copy that never gained scikit-learn or joblib -- so the
+      # learned detector could not load and three of its tests failed.
+      # requirements*.txt are kept only for the dependency audit below.
+      - name: Install
+        run: pip install -e ".[dev,ml]"
+
+      # The model must really load here. Without this the ml_model fixture
+      # would skip on a broken install and the job would still be green
+      # while testing none of the learned detector.
       - name: Run tests
-        run: pytest --cov=app tests/ -v
+        env:
+          SENTINELCORE_REQUIRE_ML: "1"
+        run: pytest tests/ -q --cov=sentinelcore --cov-report=term-missing
 
   dependency-scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Install pip-audit
         run: pip install pip-audit
-      - name: Audit runtime dependencies
-        run: pip-audit -r requirements.txt
-      - name: Audit dev/test dependencies
-        run: pip-audit -r requirements-dev.txt
+
+      # Audits the resolved dependency CLOSURE, from pyproject.toml.
+      #
+      # This job used to run `pip-audit -r requirements.txt` and
+      # `-r requirements-dev.txt`. Between them those two files cover the
+      # core dependencies and the test tooling -- and nothing else. The
+      # `ml`, `semantic` and `postgres` extras (scikit-learn, joblib,
+      # openai, psycopg) ship to users and appeared in neither file, so
+      # they were never scanned at all. Nor was anything transitive: 70
+      # packages resolve from `.[all,dev]`, against 9 lines of
+      # requirements-dev.txt.
+      #
+      # Auditing the environment directly would be simpler but wrong: it
+      # picks up the runner's own pip and setuptools, so an advisory
+      # against CI tooling fails a build that has nothing to do with this
+      # project. `pip freeze` omits those by default, which leaves exactly
+      # the packages this project puts on a user's machine -- and it cannot
+      # drift from pyproject.toml, because it is derived from it.
+      - name: Install the full dependency surface
+        run: pip install -e ".[all,dev]"
+      - name: Audit every dependency this project can install
+        run: |
+          pip freeze --exclude-editable > /tmp/closure.txt
+          echo "auditing $(wc -l < /tmp/closure.txt) resolved packages"
+          pip-audit -r /tmp/closure.txt

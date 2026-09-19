@@ -173,3 +173,35 @@ def test_install_instructions_use_the_distribution_name():
                 f"{f.relative_to(ROOT)}:{i} installs 'sentinelcore', but the "
                 f"distribution is '{dist}': {line.strip()}"
             )
+
+
+def test_requirements_txt_does_not_drift_from_pyproject():
+    """requirements*.txt and pyproject.toml are two specs for one thing, and
+    they had already drifted far enough to break CI: requirements-dev.txt
+    never gained scikit-learn or joblib, so the job that installed it could
+    not load the learned detector and three of its tests failed for months
+    without anyone seeing a red build.
+
+    The files still exist because scripts and docs reference them. This
+    pins the invariant that matters: requirements.txt must cover every
+    runtime dependency, so a package the user actually installs cannot sit
+    outside the audited set."""
+    import re
+    import tomllib
+
+    core = tomllib.load(open(ROOT / "pyproject.toml", "rb"))["project"]["dependencies"]
+
+    def base(spec):
+        return re.split(r"[><=!~\[;\s]", spec.strip(), 1)[0].lower().replace("_", "-")
+
+    declared = {base(d) for d in core}
+    req = ROOT / "requirements.txt"
+    listed = {base(l) for l in req.read_text(encoding="utf-8").splitlines()
+              if l.strip() and not l.strip().startswith(("#", "-"))}
+
+    missing = declared - listed
+    assert not missing, (
+        f"{sorted(missing)} are runtime dependencies in pyproject.toml but absent "
+        f"from requirements.txt. Anything not in that file is outside the "
+        f"dependency audit's reach."
+    )
