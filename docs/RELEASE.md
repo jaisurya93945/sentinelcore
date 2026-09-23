@@ -54,10 +54,20 @@ No secrets are added in either place. That is the point.
 ## Releasing
 
 ```bash
+# 0. Preconditions. A publish cannot be undone, so confirm all three first:
+#      - the code is pushed and the CI workflow is GREEN
+#      - GitHub → Settings → Environments contains `pypi` and `testpypi`
+#        (OIDC fails if the environment named in the job does not exist)
+#      - the pending publisher on each index names the DISTRIBUTION,
+#        `sentinelcore-ai`, and the REPOSITORY, `sentinelcore`
+
 # 1. TestPyPI — always first
 #    GitHub → Actions → "Release to PyPI" → Run workflow → target: testpypi
 
 # 2. Verify what you actually published, in a clean environment
+#    --extra-index-url is required: TestPyPI does not mirror pydantic et al,
+#    so without it the install fails on dependencies rather than on anything
+#    to do with this package.
 python -m venv /tmp/verify && /tmp/verify/bin/pip install \
   --index-url https://test.pypi.org/simple/ \
   --extra-index-url https://pypi.org/simple/ sentinelcore-ai
@@ -66,9 +76,17 @@ python -m venv /tmp/verify && /tmp/verify/bin/pip install \
 
 # 3. Only then, the real thing
 git tag v0.4.0 && git push origin v0.4.0
+
+# 4. Verify the real index too. Step 2 proved a TestPyPI artifact worked;
+#    it says nothing about the one that just went out.
+python -m venv /tmp/real && /tmp/real/bin/pip install sentinelcore-ai
+/tmp/real/bin/python -c "import sentinelcore; print(sentinelcore.__version__)"
+/tmp/real/bin/sentinel doctor
 ```
 
 The tag triggers the release. The workflow will refuse to publish if the tag does not match the version in `pyproject.toml`, and will not reach the publish step at all unless the full suite passes on Python 3.11, 3.12 and 3.13 and the wheel imports from a clean virtualenv.
+
+Re-running step 1 on an already-published version is safe: the TestPyPI job sets `skip-existing`, so a rehearsal can be repeated without bumping the version. The real PyPI job deliberately does not, because there an existing version must stop the release rather than be skipped over.
 
 ## Before the first release, decide these
 

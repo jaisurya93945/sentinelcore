@@ -7,11 +7,16 @@ name: Release to PyPI
 # a secrets store is the wrong default.
 #
 # One-time setup on PyPI (Your projects -> Publishing -> Add a pending publisher):
-#   PyPI project name : sentinelcore
+#   PyPI project name : sentinelcore-ai   <- the DISTRIBUTION name
 #   Owner             : jaisurya93945
-#   Repository        : sentinelcore
+#   Repository        : sentinelcore      <- the GitHub repo, not renamed
 #   Workflow          : release.yml
 #   Environment       : pypi
+#
+# The first two differ on purpose: PyPI refuses `sentinelcore` because
+# `sentinel-core` already exists and its similarity check treats the two as
+# the same name. See docs/RELEASE.md. A publisher registered under the old
+# name authorizes nothing, because the upload is a different project.
 
 on:
   push:
@@ -31,6 +36,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # Without this the matrix aborts on the first failure, so a break on
+      # 3.11 hides whether 3.12 and 3.13 are also broken -- exactly the
+      # diagnosis you want when deciding whether to hold a release.
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:
@@ -39,7 +48,14 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev,ml]"
+
+      # A SKIP IS NOT A PASS, and it matters more here than in CI: this job
+      # is the only gate in front of an upload that can never be undone. If
+      # the ml extra ever fails to install, the learned-detector tests would
+      # skip and this gate would go green having tested none of them.
       - run: pytest tests/ -q
+        env:
+          SENTINELCORE_REQUIRE_ML: "1"
       - name: Verify the package imports from a clean install
         run: |
           pip install build && python -m build --wheel -o dist/
@@ -85,6 +101,12 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          # TestPyPI only. A rehearsal you cannot repeat is not much of a
+          # rehearsal: without this, the second dispatch of the same version
+          # dies on "File already exists" and you have to bump the version
+          # just to re-test. Deliberately NOT set on the real PyPI job
+          # below, where an already-published version must be a hard stop.
+          skip-existing: true
 
   publish-pypi:
     needs: build
