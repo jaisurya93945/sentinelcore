@@ -16,12 +16,27 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Matches the release workflow. Testing only 3.11 here meant a
-      # 3.12/3.13 break was first seen by the release job -- the one moment
-      # you least want to discover it, since a PyPI version is immutable
-      # and cannot be re-uploaded after a bad publish.
+      # Testing only 3.11 here meant a 3.12/3.13 break was first seen by the
+      # release job -- the one moment you least want to discover it, since a
+      # PyPI version is immutable and cannot be re-uploaded after a bad
+      # publish.
+      #
+      # 3.14 is present but NON-BLOCKING, and the distinction is the point.
+      # `requires-python = ">=3.11"` has no upper bound, so pip installs
+      # this package on 3.14 today -- it is what the author's own machine
+      # runs -- while nothing had ever tested it there. Claiming support
+      # without evidence is not something this project does, so 3.14 is
+      # measured first and promoted to a blocking version and a
+      # `Programming Language :: Python :: 3.14` classifier only once these
+      # runs show it green. Until then a failure is information, not a
+      # blocked release.
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
+        experimental: [false]
+        include:
+          - python-version: "3.14"
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
