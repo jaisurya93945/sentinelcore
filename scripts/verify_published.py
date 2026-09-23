@@ -76,6 +76,44 @@ def _run(cmd, cwd, check=True):
     return r
 
 
+def _ensure_local_dist(dist: str, want: str, workdir: Path) -> bool:
+    """Build ./dist if it does not already hold this version.
+
+    Built in a throwaway virtualenv with `-P`, and neither of those is
+    incidental. `python -m build` run from the project root fails outright
+    once a ./build/ directory exists, because the working directory comes
+    first on sys.path and `build` resolves to that directory instead of the
+    installed package:
+
+        No module named build.__main__; 'build' is a package and
+        cannot be directly executed
+
+    That is the same shadowing this whole script exists to defeat, showing
+    up in the tooling rather than the check. `-P` drops the working
+    directory from sys.path and it resolves correctly. The separate
+    virtualenv keeps the build backend out of the environment we are about
+    to verify, which must contain only what the wheel pulls in.
+    """
+    pattern = f"{dist.replace('-', '_')}-{want}-*.whl"
+    if list((ROOT / "dist").glob(pattern)):
+        return True
+
+    print(f"      no {pattern} in ./dist — building it")
+    bvenv = workdir / "buildenv"
+    bpy = bvenv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    _run([sys.executable, "-m", "venv", str(bvenv)], cwd=workdir)
+    r = _run([str(bpy), "-m", "pip", "install", "--quiet", "build"], cwd=workdir, check=False)
+    if r.returncode != 0:
+        print(f"      could not install the build backend:\n{(r.stdout + r.stderr).strip()[-600:]}")
+        return False
+    r = _run([str(bpy), "-P", "-m", "build", "--outdir", str(ROOT / "dist"), str(ROOT)],
+             cwd=workdir, check=False)
+    if r.returncode != 0:
+        print(f"      build failed:\n{(r.stdout + r.stderr).strip()[-900:]}")
+        return False
+    return bool(list((ROOT / "dist").glob(pattern)))
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--index", choices=sorted(INDEXES), required=True)
@@ -103,6 +141,9 @@ def main() -> int:
         _run([sys.executable, "-m", "venv", str(venv)], cwd=tmp)
 
         print("[1/5] installing from the index")
+        if args.index == "local" and not _ensure_local_dist(dist, want, tmp):
+            print("      cannot verify: no local artifact to check")
+            return 1
         r = _run([str(py), "-m", "pip", "install", "--quiet",
                   *INDEXES[args.index], f"{dist}=={want}"], cwd=tmp, check=False)
         if r.returncode != 0:

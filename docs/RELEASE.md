@@ -54,7 +54,12 @@ No secrets are added in either place. That is the point.
 ## Releasing
 
 ```bash
-# 0. Preconditions. A publish cannot be undone, so confirm all three first:
+# 0. Preconditions. A publish cannot be undone, so confirm all four first:
+#      - `git remote -v` prints origin. If the working tree was restored
+#        from an archive, check this FIRST: replacing .git replaces the
+#        remote too, and `git push` then fails with "'origin' does not
+#        appear to be a git repository" long after the mistake was made.
+#        git remote add origin https://github.com/jaisurya93945/sentinelcore.git
 #      - the code is pushed and the CI workflow is GREEN
 #      - GitHub → Settings → Environments contains `pypi` and `testpypi`
 #        (OIDC fails if the environment named in the job does not exist)
@@ -63,8 +68,9 @@ No secrets are added in either place. That is the point.
 
 # 1. Check the wheel BEFORE it leaves the machine. A packaging defect
 #    caught here costs nothing; the same defect caught after upload costs
-#    a version number permanently.
-python -m build && python scripts/verify_published.py --index local
+#    a version number permanently. Builds ./dist itself if it is stale,
+#    so there is no separate `python -m build` step to get wrong.
+python scripts/verify_published.py --index local
 
 # 2. TestPyPI
 #    GitHub → Actions → "Release to PyPI" → Run workflow → target: testpypi
