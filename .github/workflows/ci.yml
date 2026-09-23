@@ -59,6 +59,41 @@ jobs:
           SENTINELCORE_REQUIRE_ML: "1"
         run: pytest tests/ -q --cov=sentinelcore --cov-report=term-missing
 
+  # The PostgreSQL backend was shipped as IMPLEMENTED, NOT INTEGRATION-TESTED
+  # because no server was reachable where it was written. Its 13 tests --
+  # including the only LIVE evidence that tenant isolation holds on the
+  # production backend, everything else being a static check over the source
+  # -- had therefore never executed anywhere. This job is what stops that
+  # claim decaying back to unverified the moment nobody runs it by hand.
+  postgres:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sentinelcore_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev,postgres]"
+      # REQUIRE_POSTGRES turns "no server" from thirteen quiet skips and a
+      # green tick into a hard error. A job that reports success having run
+      # nothing is worse than no job, because it is believed.
+      - name: Run the PostgreSQL integration tests
+        env:
+          SENTINELCORE_REQUIRE_POSTGRES: "1"
+          SENTINELCORE_TEST_POSTGRES_URL: postgresql://postgres:postgres@localhost:5432/sentinelcore_test
+        run: pytest tests/integration/test_postgres.py -v
+
   dependency-scan:
     runs-on: ubuntu-latest
     steps:

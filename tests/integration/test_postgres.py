@@ -26,6 +26,23 @@ import pytest
 
 PG_URL = os.environ.get("SENTINELCORE_TEST_POSTGRES_URL")
 
+# A SKIP IS NOT A PASS.
+#
+# These tests are the ONLY live evidence that tenant isolation holds on the
+# production backend; everything else about Postgres scoping is a static
+# check over the source. So the environment that is supposed to run them
+# must fail loudly if it cannot, rather than reporting thirteen tidy `s`
+# characters and a green tick. CI sets SENTINELCORE_REQUIRE_POSTGRES=1; a
+# developer without a server still gets an ordinary skip.
+_REQUIRED = os.environ.get("SENTINELCORE_REQUIRE_POSTGRES") == "1"
+
+if _REQUIRED and not PG_URL:
+    raise RuntimeError(
+        "SENTINELCORE_REQUIRE_POSTGRES=1 but SENTINELCORE_TEST_POSTGRES_URL is unset. "
+        "This environment is supposed to exercise the PostgreSQL backend, so skipping "
+        "would hide the gap it exists to close."
+    )
+
 pytestmark = pytest.mark.skipif(
     not PG_URL,
     reason="SENTINELCORE_TEST_POSTGRES_URL not set; PostgreSQL integration tests require a live server",
@@ -34,11 +51,24 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def store():
-    pytest.importorskip("psycopg_pool", reason="pip install 'sentinelcore[postgres]'")
+    if _REQUIRED:
+        # importorskip would turn a missing driver into a skip, which is the
+        # one outcome this environment must not produce.
+        import psycopg_pool  # noqa: F401
+    else:
+        pytest.importorskip("psycopg_pool", reason="pip install 'sentinelcore-ai[postgres]'")
     from sentinelcore.storage.postgres_backend import PostgresStore
 
     s = PostgresStore(PG_URL)
     s.initialize()
+
+    # Guards against the failure this file would otherwise never notice: a
+    # backend that silently fell back to SQLite would pass every assertion
+    # below while testing nothing about PostgreSQL.
+    assert s.health()["backend"] == "postgres", (
+        f"expected the PostgreSQL backend, got {s.health()['backend']!r} -- "
+        f"these tests would be measuring the wrong store"
+    )
     # Clean slate without dropping the schema, so a shared test database is
     # not destroyed by running the suite.
     with s._get_pool().connection() as conn:

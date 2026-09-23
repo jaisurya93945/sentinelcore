@@ -25,7 +25,7 @@ Backend selection is explicit and never inferred. A misconfigured backend **fail
 | SQLite backend | **TESTED** — 24 persistence tests incl. concurrency, migration upgrade, retention, failure semantics |
 | Migrations | **TESTED** — fresh install, legacy-schema upgrade with row preservation, idempotent restart |
 | Retention | **TESTED** — time-based and row-count bounds, policy-scope enforcement, failure isolation |
-| PostgreSQL backend | **IMPLEMENTED, NOT INTEGRATION-TESTED** — 8 tests exist and **skip** without a live server; none ran in the development environment |
+| PostgreSQL backend | **INTEGRATION-TESTED** against PostgreSQL 16.13 — 13 tests (8 SQLite-parity + 5 tenancy), run in CI against a `postgres:16` service. The fixture asserts `health()['backend'] == 'postgres'`, so a silent SQLite fallback cannot pass them. Coverage of the backend is **59%**; HA, failover and connection-loss behaviour are **NOT** tested or claimed |
 | High availability | **NOT CLAIMED** — PostgreSQL support is not HA |
 
 ## Migrations

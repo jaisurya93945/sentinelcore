@@ -31,14 +31,14 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Semantic detector (optional, off by default, needs API key) | `tests/unit/test_semantic_detector.py` (9 offline tests). **RUN against a live API**: precision 97.44% recall 55.07% FPR 1.25% on the held-out split -- lower recall than the TF-IDF classifier's 72.0%. See Finding 6 |
 | Human approval workflow (PENDING/APPROVED/DENIED/EXPIRED, fail-closed on expiry) | `tests/unit/test_approvals.py` -- 14 tests incl. expiry-is-refusal and separation of duty |
 | Identity + tenant isolation (both backends) | `tests/unit/test_tenancy.py` -- 16 tests. Found a real isolation bug: a leftover global unique index let one tenant overwrite another's MCP baseline |
-| Tenant scoping on PostgreSQL | **IMPLEMENTED, NOT INTEGRATION-TESTED** -- identical scoping, static check covers both backends, 13 integration tests skip without a live server |
+| Tenant scoping on PostgreSQL | **INTEGRATION-TESTED against PostgreSQL 16.** 5 live cross-tenant tests, run in CI against a `postgres:16` service. Mutation-checked: removing the tenant filter from the `scan_events` query fails `test_audit_events_do_not_cross_tenants`, and removing it from the approvals query fails `test_another_tenant_cannot_decide_an_approval` -- so these catch real isolation bugs rather than merely passing |
 | Operator dashboard (4 tabs, action surfaces for approvals/MCP/feedback) | `tests/unit/test_dashboard.py` -- 12 tests incl. XSS regression, CSP enforcement, and a check that every subsystem is reachable |
 | MCP definition pinning / rug-pull detection | `tests/unit/test_mcp_pinning.py` -- 22 tests. Found and fixed a bug where an unpinned server reported every tool as changed |
 | Adaptive-attack harness (8 transform families, tier-E composition search) | `tests/unit/test_redteam.py` -- 15 tests incl. enforced preservation round-trips and separation from enforcement. Found and fixed a case-destroying bug in my own homoglyph transform |
 | Robustness against adaptive attackers | **NOT CLAIMED** -- 8 hand-written families at budget 40, mostly targeting obfuscation classes the detector was built for. See `docs/ADAPTIVE_EVAL.md` limitations |
 | Pre-deployment assessment (`sentinel assess`) | `tests/unit/test_assess.py` -- 23 tests. Found and fixed a word-boundary bug that missed snake_case tool names, the dominant convention |
 | Storage abstraction, versioned migrations, WAL SQLite, retention | `tests/unit/test_storage.py` -- 24 tests incl. legacy-schema upgrade preserving rows, 600 concurrent writes with none lost, exactly-one-decider under 10 concurrent deciders |
-| PostgreSQL backend | **IMPLEMENTED, NOT INTEGRATION-TESTED** -- 8 tests skip without `SENTINELCORE_TEST_POSTGRES_URL`; no server was reachable in the dev environment. HA is NOT claimed |
+| PostgreSQL backend | **INTEGRATION-TESTED.** 13 tests (8 SQLite-parity + 5 tenancy) against live PostgreSQL 16.13, schema v5, `backend='postgres'` asserted by the fixture so a silent SQLite fallback cannot pass. Runs in CI; `SENTINELCORE_REQUIRE_POSTGRES=1` makes a missing server a hard error rather than 13 quiet skips. **Coverage is only 59%** and **HA is still NOT claimed** -- no failover, replication or connection-loss testing |
 | Operator feedback / FP review queue, exports to eval-set schema | `tests/unit/test_feedback.py` -- 11 tests incl. the retention boundary |
 | Alerting (log/webhook/Slack sinks, bounded queue, tenant+shape-keyed cooldown) | `tests/unit/test_alerts.py` -- 12 tests focused on failure properties |
 | Rate limiting + payload caps (off by default) | `tests/unit/test_rate_limiting.py` -- 14 tests; bounded LRU key space after an audit found unbounded growth |
@@ -50,16 +50,20 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |
 | Authentication + role-based authorization (viewer/operator/admin) | `tests/unit/test_auth.py`, `test_auth_integration.py` -- all 6 scenarios live-verified |
 
-**Verified right now:** 5 registered detectors, 8 API endpoints, 154 passing tests, `sentinelcore/core/auth.py` at 100% coverage, 98% overall coverage. Full section-by-section hardening status: `docs/hardening/STATUS.md`.
+**Verified right now** — re-measured, not carried forward: **7 registered detectors**, **23 API operations** across 9 routers, **446 passing tests with 0 skipped** (13 of those require a live PostgreSQL server and now get one in CI), `sentinelcore/core/auth.py` at 100% coverage, **85% overall coverage**.
+
+Those numbers had drifted badly: this line previously read 5 detectors, 8 endpoints, 154 tests and 98% coverage, none of which had been true for several milestones. **Coverage genuinely fell, 98% → 85%**, and that is not a measurement artefact — the codebase roughly tripled to 3,133 statements while newer subsystems shipped with thinner tests. The weakest is `storage/postgres_backend.py` at **59%**, which is now integration-tested but far from exercised. Stating it here rather than quoting the old number is the entire point of this document.
+
+Full section-by-section hardening status: `docs/hardening/STATUS.md`.
 
 ## 2. Experimental / Partial — real, but with known, load-bearing caveats
 
 | Capability | The real caveat |
 |---|---|
 | SANITIZE decision | Enforced in `/api/v1/scan` and the proxy's non-streaming path with mandatory re-scan + escalation. Not yet wired into streaming/tool-call/MCP paths. |
-| HUMAN_APPROVAL decision | Returned correctly; no mechanism exists to collect an actual approval. |
+| ~~HUMAN_APPROVAL has no collection mechanism~~ | **This caveat was stale and is withdrawn.** `api/v1/approvals.py` exposes 3 operations, `services/approvals.py` implements `list_pending`/`decide`, and the dashboard has an Approvals tab. 14 tests including fail-closed expiry and separation of duty. |
 | Streaming cutoff | A trigger pattern split exactly across a chunk boundary can partially leak before detection completes. |
-| Origin tagging | Tracked and returned, but doesn't yet affect scoring or policy. |
+| ~~Origin tagging does not affect scoring~~ | **This caveat was stale and is withdrawn.** Measured directly on one identical attack string: risk 64 (input) / 97 (context) / 100 (tool_arguments), and `use_origin_trust=False` collapses all three back to 64. The multipliers themselves remain an uncalibrated modelling choice -- see the row below, which is the caveat that still stands. |
 | Output blocking (proxy) | Stops the leak from reaching the client; does not stop the upstream API cost, already incurred. |
 | Authentication | Real when enabled, but off by default -- a documented risk if network-reachable without configuring it. |
 | Provenance trust multipliers | Ordering is principled; the constants (1.0/1.5/1.8) are a stated modeling choice, NOT calibrated. |
@@ -67,7 +71,19 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 
 ## 3. Planned, Not Implemented
 
-Conflicting-instruction detection · source trust/provenance tracking · sanitize enforcement for streaming/tool-call/MCP · origin-aware policy weighting · rate limiting/circuit breakers · Python/JS SDKs · CLI · Kubernetes/Helm · RBAC/ABAC beyond the 3-role auth model · SIEM/alerting integration · multi-tenancy · horizontal scaling · autonomous red-teaming · key rotation tooling.
+Conflicting-instruction detection · sanitize enforcement for streaming/tool-call/MCP · circuit breakers · JS SDK · Kubernetes/Helm · RBAC/ABAC beyond the 3-role auth model · SIEM integration (webhook and Slack sinks exist; no CEF/LEEF or native connector) · horizontal scaling · scheduled MCP polling (no scheduler ships; run `sentinel mcp check` from cron or CI) · autonomous red-teaming · key rotation tooling · live-agent adaptive evaluation.
+
+**Six entries were removed from this list because they had shipped and nobody updated it** — a stale "not implemented" is a smaller sin than a stale "done", but in a document whose only job is an accurate status it is still a defect. Each was re-checked against source and tests before removal:
+
+| Was listed as planned | Actually |
+|---|---|
+| CLI | `sentinelcore/cli.py`; `sentinel doctor/scan/proxy/policy/assess/mcp`, verified running from the published wheel |
+| Rate limiting | `core/limits.py`, 14 tests, bounded LRU key space |
+| Multi-tenancy | `core/identity.py`, ambient tenant scoping, live cross-tenant tests on both backends |
+| Alerting integration | `services/alerts.py`, log/webhook/Slack sinks, tenant+shape-keyed cooldown. *SIEM specifically is still absent, so it stays above* |
+| Source trust / provenance tracking | `services/origin_trust.py`, feeding `calculate_risk_score` |
+| Origin-aware policy weighting | Origin scales risk, and risk drives the policy decision — measured at 64/97/100 for one identical string |
+| Python SDK | The `Guard` API is the SDK; three integration shapes, on PyPI as `sentinelcore-ai` |
 
 ## 4. Security Gaps (stated plainly)
 

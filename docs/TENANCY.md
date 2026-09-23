@@ -81,7 +81,7 @@ Migrations 4 and 5 are additive. Existing rows backfill to `default`. Verified o
 |---|---|
 | Principal derivation, tenant scoping, isolation | **TESTED** — 16 tests including cross-tenant read, decide, attach, retention and pin-collision attempts |
 | Upgrade from pre-tenancy database | **TESTED** |
-| PostgreSQL parity | **IMPLEMENTED, NOT INTEGRATION-TESTED** — every query is tenant-scoped and the static check runs against both backends, but the 13 integration tests **skip** without a live server. No PostgreSQL server was reachable in the development environment |
+| PostgreSQL parity | **INTEGRATION-TESTED.** Every query is tenant-scoped, the static check runs against both backends, and 5 live cross-tenant tests now run against PostgreSQL 16 in CI. Mutation-checked: dropping the tenant filter from the scan-events query fails `test_audit_events_do_not_cross_tenants`; dropping it from the approvals query fails `test_another_tenant_cannot_decide_an_approval`. `SENTINELCORE_REQUIRE_POSTGRES=1` in CI turns a missing server into a hard error, so these cannot quietly revert to skipping |
 | SSO / OIDC / user management | **NOT PLANNED** — SentinelCore is not an identity provider. Principals come from the credential already presented |
 
 **With authentication disabled there is no identity, and therefore no isolation.** Everything runs as one implicit principal in `default`. That is correct for local use, and it is why `sentinel assess` reports disabled authentication as a HIGH finding.

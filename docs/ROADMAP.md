@@ -14,10 +14,12 @@ Prioritized against what exists today, verified against `docs/CAPABILITY_MATRIX.
 
 Status as of `v0.4.0`: the package installs, imports, scans and ships a working CLI, verified in a clean virtualenv (784KB installed, three core dependencies). Release infrastructure uses PyPI Trusted Publishing — no API token exists anywhere. Item 4 (a Dockerfile that has actually been built) remains open: no container runtime in the dev environment.
 
-**`sentinelcore` is available on PyPI.** Note `sentinel-core` is taken by an unrelated project — a hyphen typo lands users on someone else's package. Release procedure: `docs/RELEASE.md`.
+**PUBLISHED: `pip install sentinelcore-ai` (imports as `sentinelcore`), v0.4.0, verified installing and enforcing from the real index.** The distribution could not be called `sentinelcore`: PyPI's name-similarity check deletes `. _ -` and folds `l/I/1` and `O/0` before comparing, so it collapses to the same string as the unrelated `sentinel-core` and is unregisterable by anyone. A hyphen typo therefore lands users on someone else's package — worth knowing for a security tool. Release procedure: `docs/RELEASE.md`.
 
 
-**1. Ship a real Python package. — DONE.** `pip install sentinelcore-ai` (imports as `sentinelcore`). Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify in a clean venv: `pip install dist/*.whl && python -c "import sentinelcore"`. **Do not publish to PyPI without explicit authorization.**
+**1. Ship a real Python package. — DONE.** `pip install sentinelcore-ai` (imports as `sentinelcore`). Proper `pyproject.toml` metadata, `py.typed`, semantic versioning, wheel + sdist, minimal mandatory dependencies with extras (`[ml]`, `[semantic]`, `[server]`). Verify with `python scripts/verify_published.py --index local|testpypi|pypi`, **not** by hand: the hand-written `python -c "import sentinelcore"` check that used to be recommended here silently passed when run from a clone, because the working directory precedes the virtualenv on `sys.path` and the source tree was what got imported. An empty virtualenv passed it. The script builds outside the repository, runs with `-P`, and asserts the imported module lives inside the virtualenv.
+
+**Published to PyPI 2026-09-23 with explicit authorization.** v0.4.0 only; any further release needs the same.
 
 **2. A stable public API — DONE.** Three integration shapes, because developers arrive with different constraints:
 
@@ -44,7 +46,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **7. Dashboard beyond a live tail. — DONE.** Four tabs: Activity (live decisions with one-click "report this was wrong"), Approvals (approve/deny), MCP changes (acknowledge), Health (storage, alerting, feedback counters with their bias caveat). Fixed a **stored XSS** found during the work — see the threat model. Decision-rate trends, top finding types, per-tool authorization outcomes, pending approvals, false-positive review queue. The FP review queue matters most: over-defense is the failure operators actually feel, and giving them a way to see and correct it is worth more than another detector.
 
-**8. Persistence that survives production. — DONE (PostgreSQL implemented, not integration-tested).** Storage abstraction with versioned migrations, WAL-mode SQLite with thread-local connections, retention with independent time and row-count bounds, defined failure semantics, and a PostgreSQL backend behind `sentinelcore[postgres]`. See `docs/STORAGE.md`. 24 persistence tests; 8 PostgreSQL integration tests exist and **skip** without a live server.
+**8. Persistence that survives production. — DONE (PostgreSQL now integration-tested).** Storage abstraction with versioned migrations, WAL-mode SQLite with thread-local connections, retention with independent time and row-count bounds, defined failure semantics, and a PostgreSQL backend behind `sentinelcore[postgres]`. See `docs/STORAGE.md`. 24 persistence tests. The 13 PostgreSQL integration tests **now run against a live PostgreSQL 16 service in CI** — previously they had never executed anywhere. `SENTINELCORE_REQUIRE_POSTGRES=1` makes a missing server a hard error there, so they cannot silently return to skipping. Coverage of `postgres_backend.py` is **59%**, and HA is still not claimed.
 
 ## P2 — Pre-deployment and continuous surfaces
 
@@ -52,7 +54,7 @@ All three now exist. `sentinelcore.guard` is the public module; `sentinelcore.ap
 
 **10. Continuous monitoring. — DONE (polling is manual).** Fingerprint pinning with change detection for MCP tool definitions: `sentinel mcp pin/check/changes`, API endpoints, durable change history (schema v3), alert integration, CI exit codes. Scheduled polling is **PLANNED** — this package has no scheduler, so run `sentinel mcp check` from cron or CI. See `docs/MCP_PINNING.md`.
 
-**11. Multi-agent / multi-tenant. — PARTIAL.** Identity model derived from the presented credential, ambient tenant scoping enforced by a static test over the backend source, and `decided_by` now taken from the authenticated principal rather than self-asserted. PostgreSQL is now scoped identically and the static check covers both backends, though its 13 integration tests skip without a live server. See `docs/TENANCY.md`.
+**11. Multi-agent / multi-tenant. — PARTIAL.** Identity model derived from the presented credential, ambient tenant scoping enforced by a static test over the backend source, and `decided_by` now taken from the authenticated principal rather than self-asserted. PostgreSQL is scoped identically, and the isolation claim no longer rests on the static source check alone: 5 live cross-tenant tests run against PostgreSQL 16 in CI, and both were mutation-checked — deleting a tenant filter from the scan-events query or the approvals query fails the corresponding test. See `docs/TENANCY.md`.
 
 ## P3 — Research-dependent, deliberately last
 

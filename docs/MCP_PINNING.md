@@ -56,5 +56,5 @@ Detected changes flow into the existing alert path — a definition change is ex
 | Fingerprinting, change detection, pin lifecycle | **TESTED** — 22 tests |
 | Storage (SQLite) | **TESTED** — migration v2→v3 upgrade verified with rows preserved |
 | Pin identity | **(tenant, server, tool_name)** — two tenants may pin a server of the same name independently |
-| Storage (PostgreSQL) | **IMPLEMENTED, NOT INTEGRATION-TESTED** |
+| Storage (PostgreSQL) | **INTEGRATION-TESTED** — incl. `test_same_server_name_in_two_tenants_is_independent`, which covers the pin-collision bug found earlier |
 | Automatic periodic polling of live MCP servers | **PLANNED** — this package has no scheduler; run `sentinel mcp check` from cron or CI |
