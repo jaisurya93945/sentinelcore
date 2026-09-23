@@ -61,28 +61,47 @@ No secrets are added in either place. That is the point.
 #      - the pending publisher on each index names the DISTRIBUTION,
 #        `sentinelcore-ai`, and the REPOSITORY, `sentinelcore`
 
-# 1. TestPyPI — always first
+# 1. Check the wheel BEFORE it leaves the machine. A packaging defect
+#    caught here costs nothing; the same defect caught after upload costs
+#    a version number permanently.
+python -m build && python scripts/verify_published.py --index local
+
+# 2. TestPyPI
 #    GitHub → Actions → "Release to PyPI" → Run workflow → target: testpypi
 
-# 2. Verify what you actually published, in a clean environment
-#    --extra-index-url is required: TestPyPI does not mirror pydantic et al,
-#    so without it the install fails on dependencies rather than on anything
-#    to do with this package.
-python -m venv /tmp/verify && /tmp/verify/bin/pip install \
-  --index-url https://test.pypi.org/simple/ \
-  --extra-index-url https://pypi.org/simple/ sentinelcore-ai
-/tmp/verify/bin/python -c "import sentinelcore; print(sentinelcore.__version__)"
-/tmp/verify/bin/sentinel doctor
+# 3. Verify what you actually published
+python scripts/verify_published.py --index testpypi
 
-# 3. Only then, the real thing
+# 4. Only then, the real thing
 git tag v0.4.0 && git push origin v0.4.0
 
-# 4. Verify the real index too. Step 2 proved a TestPyPI artifact worked;
+# 5. Verify the real index too. Step 3 proved a TestPyPI artifact worked;
 #    it says nothing about the one that just went out.
-python -m venv /tmp/real && /tmp/real/bin/pip install sentinelcore-ai
-/tmp/real/bin/python -c "import sentinelcore; print(sentinelcore.__version__)"
-/tmp/real/bin/sentinel doctor
+python scripts/verify_published.py --index pypi
 ```
+
+### Verify with the script, not by hand
+
+The hand-written version of steps 3 and 5 used to be in this file, and it
+was wrong in the direction that reports success:
+
+```bash
+python -m venv /tmp/verify && /tmp/verify/bin/pip install ... sentinelcore-ai
+/tmp/verify/bin/python -c "import sentinelcore; print(sentinelcore.__version__)"
+```
+
+Run from a clone of this repository — the obvious place to run it — `python
+-c` puts the working directory first on `sys.path`, so `import sentinelcore`
+resolves to `./sentinelcore/` in the source tree and never touches the
+virtualenv. **An empty virtualenv passes that check.** A published wheel
+missing every data file would pass it too.
+
+`scripts/verify_published.py` builds the environment outside the repository,
+runs every check with `-P` and a foreign working directory, and asserts the
+imported module's `__file__` is inside the virtualenv — so shadowing is
+impossible rather than merely unlikely. It also checks the version, the
+runtime-loaded data files and the console script, and exits non-zero on any
+failure.
 
 The tag triggers the release. The workflow will refuse to publish if the tag does not match the version in `pyproject.toml`, and will not reach the publish step at all unless the full suite passes on Python 3.11, 3.12 and 3.13 and the wheel imports from a clean virtualenv.
 
