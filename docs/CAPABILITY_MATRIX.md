@@ -50,7 +50,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |
 | Authentication + role-based authorization (viewer/operator/admin) | `tests/unit/test_auth.py`, `test_auth_integration.py` -- all 6 scenarios live-verified |
 
-**Verified right now** — re-measured, not carried forward: **7 registered detectors**, **23 API operations** across 9 routers, **465 passing tests with 0 skipped** (13 of those require a live PostgreSQL server and now get one in CI), `sentinelcore/core/auth.py` at 100% coverage, **85% overall coverage**.
+**Verified right now** — re-measured, not carried forward: **7 registered detectors**, **23 API operations** across 9 routers, **471 passing tests with 0 skipped** (13 of those require a live PostgreSQL server and now get one in CI), `sentinelcore/core/auth.py` at 100% coverage, **85% overall coverage**.
 
 Those numbers had drifted badly: this line previously read 5 detectors, 8 endpoints, 154 tests and 98% coverage, none of which had been true for several milestones. **Coverage genuinely fell, 98% → 85%**, and that is not a measurement artefact — the codebase roughly tripled to 3,133 statements while newer subsystems shipped with thinner tests. The weakest is `storage/postgres_backend.py` at **59%**, which is now integration-tested but far from exercised. Stating it here rather than quoting the old number is the entire point of this document.
 
@@ -60,14 +60,14 @@ Full section-by-section hardening status: `docs/hardening/STATUS.md`.
 
 | Capability | The real caveat |
 |---|---|
-| SANITIZE decision | Enforced in `/api/v1/scan` and the proxy's non-streaming path with mandatory re-scan + escalation. Not yet wired into streaming/tool-call/MCP paths. |
+| SANITIZE decision | Enforced in `/api/v1/scan`, the proxy's non-streaming path, **and now the tool-call path**, each with mandatory re-scan + escalation. Structured arguments are rebuilt field by field (`core/textextract.map_strings`), which is why this was skipped originally: the sanitizers take text and tool arguments are a nested structure, so there was nothing to hand back. **Still not wired into the streaming or MCP paths** — a SANITIZE decision there carries no sanitized output and must be treated as refusal. |
 | ~~HUMAN_APPROVAL has no collection mechanism~~ | **This caveat was stale and is withdrawn.** `api/v1/approvals.py` exposes 3 operations, `services/approvals.py` implements `list_pending`/`decide`, and the dashboard has an Approvals tab. 14 tests including fail-closed expiry and separation of duty. |
 | Streaming cutoff | A trigger pattern split exactly across a chunk boundary can partially leak before detection completes. |
 | ~~Origin tagging does not affect scoring~~ | **This caveat was stale and is withdrawn.** Measured directly on one identical attack string: risk 64 (input) / 97 (context) / 100 (tool_arguments), and `use_origin_trust=False` collapses all three back to 64. The multipliers themselves remain an uncalibrated modelling choice -- see the row below, which is the caveat that still stands. |
 | Output blocking (proxy) | Stops the leak from reaching the client; does not stop the upstream API cost, already incurred. |
 | Authentication | Real when enabled, but off by default -- a documented risk if network-reachable without configuring it. |
 | Provenance trust multipliers | Ordering is principled; the constants (1.0/1.5/1.8) are a stated modeling choice, NOT calibrated. |
-| SANITIZE enforcement | Real for the finding types with a defined transform; a multi-word character-spacing collapse can under-represent danger by gluing words together (documented edge case, not hidden). |
+| SANITIZE enforcement | **The word-gluing edge case was a bypass, and is fixed.** `_collapse_character_spacing` started from `text.split()`, discarding how much whitespace separated each token — but attackers space words apart more widely than letters, and that gap is the only word boundary. "i g n o r e   a l l   p r e v i o u s" collapsed to `Ignoreallpreviousinstructions`, which matches no phrase pattern, so the sanitizer reported **ENFORCED while returning text that still carried the attack** and the re-scan had nothing to escalate on. Cleaning made a detectable attack undetectable — strictly worse than not sanitizing. A 2+ character gap now ends the word, giving `ignore all previous instructions`, which escalates to BLOCK. The test that had pinned the old behaviour now asserts the new one. |
 
 ## 3. Planned, Not Implemented
 

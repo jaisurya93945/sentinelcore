@@ -152,6 +152,15 @@ class ToolCallResult(BaseModel):
         description="The more severe of tool_authorization and the content-scanning decision.",
     )
     enforcement_status: EnforcementStatus = Field(default=EnforcementStatus.NOT_APPLICABLE)
+    sanitized_arguments: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Set when enforcement_status is ENFORCED or ESCALATED: the arguments with "
+            "the obfuscation removed, re-scanned. Use THESE, not the originals. Absent "
+            "means nothing was sanitized -- including when the decision is SANITIZE and "
+            "enforcement_status is NOT_IMPLEMENTED, which is a refusal, not permission."
+        ),
+    )
     approval_id: str | None = Field(
         default=None,
         description=(

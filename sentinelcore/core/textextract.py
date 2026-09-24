@@ -95,6 +95,39 @@ def iter_strings(obj: Any, _depth: int = 0, _budget: list[int] | None = None) ->
     # str()-ed into the output: it would add noise without adding signal.
 
 
+def map_strings(obj: Any, fn, _depth: int = 0) -> Any:
+    """Rebuild a structure with `fn` applied to every string in it.
+
+    The counterpart to `iter_strings`, and the thing that makes SANITIZE
+    meaningful for tool arguments. The sanitizers operate on text, but tool
+    arguments are structured, so there was previously nothing for a
+    SANITIZE decision to hand back on that path and the decision was
+    returned with no action behind it.
+
+    KEYS are mapped too. A key containing zero-width characters is itself
+    the attack -- "bo​dy" is a field name chosen to look like "body"
+    to a human and differ to a parser -- so stripping them is the repair,
+    not damage. Where two keys collapse onto the same name the first wins,
+    which is deterministic and cannot silently multiply fields.
+    """
+    if _depth > MAX_DEPTH:
+        return obj
+    if isinstance(obj, str):
+        return fn(obj)
+    if isinstance(obj, dict):
+        out: dict = {}
+        for k, v in obj.items():
+            nk = fn(k) if isinstance(k, str) else k
+            if nk not in out:
+                out[nk] = map_strings(v, fn, _depth + 1)
+        return out
+    if isinstance(obj, list):
+        return [map_strings(v, fn, _depth + 1) for v in obj]
+    if isinstance(obj, tuple):
+        return tuple(map_strings(v, fn, _depth + 1) for v in obj)
+    return obj
+
+
 def extract_scannable_text(obj: Any) -> str:
     """The text a detector should see for a structured tool argument.
 

@@ -32,6 +32,7 @@ from sentinelcore.services.audit_log import log_scan_event
 from sentinelcore.services.policy_engine import decide, most_severe
 from sentinelcore.services.risk_engine import calculate_risk_score
 from sentinelcore.services.approvals import request_approval
+from sentinelcore.services.sanitizer import enforce_sanitize_arguments
 from sentinelcore.services.tool_policy import authorize_tool
 from sentinelcore.core.textextract import extract_scannable_text
 
@@ -74,6 +75,24 @@ def scan_tool_call(payload: ToolCallRequest) -> ToolCallResult:
     # creates a real, queryable approval record. Until a human decides it,
     # the action is NOT authorised -- and if the store is unavailable the
     # id is None, which callers must treat as refusal, not as consent.
+    # SANITIZE used to fall through here with nothing behind it: the
+    # response said "sanitize" while carrying no sanitized arguments and
+    # enforcement_status NOT_APPLICABLE. Callers following the decision had
+    # nothing to act on; callers treating not-BLOCK as permission forwarded
+    # the original arguments. Now it is carried out, re-scanned, and
+    # escalated if the cleaned form still trips the policy.
+    if final_decision == Decision.SANITIZE:
+        san = enforce_sanitize_arguments(payload.arguments, findings)
+        result.enforcement_status = san.enforcement_status
+        result.findings = san.findings
+        result.risk_score = san.risk_score
+        # The tool-NAME verdict is independent and still binds: sanitizing
+        # an argument does not make a denied tool callable.
+        result.decision = most_severe([san.decision, tool_decision])
+        final_decision = result.decision
+        if san.enforcement_status in (EnforcementStatus.ENFORCED, EnforcementStatus.ESCALATED):
+            result.sanitized_arguments = san.sanitized_arguments
+
     if final_decision == Decision.HUMAN_APPROVAL:
         digest = hashlib.sha256(json.dumps(payload.arguments, sort_keys=True).encode()).hexdigest()[:16]
         result.approval_id = request_approval(result.scan_id, payload.tool_name, digest, risk_score)
