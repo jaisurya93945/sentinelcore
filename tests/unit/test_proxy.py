@@ -512,3 +512,114 @@ def test_streaming_tool_call_fragments_are_reassembled_and_blocked():
     assert response.status_code == 200
     assert "content_filter" in response.text
     assert " done" not in response.text  # stream cut before the trailing chunk
+
+
+# --- streaming hold-back -------------------------------------------------
+#
+# The chunk that COMPLETES a dangerous pattern was always suppressed
+# correctly. The problem was the chunks already gone: a secret split across
+# a boundary had its prefix delivered before the pattern could match.
+# Measured on the pre-fix code, an AWS key streamed as
+# "...AKIAIOSFOD" + "NN7EXAMPLE" put 10 of its 20 characters on the wire.
+#
+# The docstring used to say this was unfixable -- "scanning faster doesn't
+# fix this; it's a property of chunk boundaries". True of scanning, and
+# beside the point: the fix is to RELEASE later, not to scan sooner.
+
+def _stream(sse_bytes):
+    """Run a streaming completion and return (assistant text, was_blocked)."""
+    with respx.mock:
+        respx.post(UPSTREAM_CHAT_URL).mock(return_value=httpx.Response(
+            200, content=sse_bytes, headers={"content-type": "text/event-stream"}))
+        r = client.post("/v1/chat/completions",
+                        json={"model": "gpt-4", "stream": True,
+                              "messages": [{"role": "user", "content": "hello"}]})
+    text = ""
+    for line in r.text.splitlines():
+        if line.startswith("data: ") and "[DONE]" not in line:
+            try:
+                text += json.loads(line[6:])["choices"][0]["delta"].get("content", "") or ""
+            except Exception:
+                pass
+    return text, ("content_filter" in r.text)
+
+
+def _chunks(*contents):
+    body = b"".join(
+        ('data: ' + json.dumps({"choices": [{"delta": {"content": c}, "index": 0}]}) + "\n\n").encode()
+        for c in contents)
+    return body + b"data: [DONE]\n\n"
+
+
+def test_secret_split_across_chunks_does_not_partially_leak():
+    """THE regression. 10 of 20 characters of an AWS key reached the client
+    before this buffer existed."""
+    secret = "AKIAIOSFODNN7EXAMPLE"
+    head, tail = secret[:10], secret[10:]
+    text, blocked = _stream(_chunks(f"Your key is {head}", f"{tail} keep it safe"))
+
+    assert blocked, "the completed secret must still be blocked"
+    assert head not in text, f"partial secret leaked to the client: {text!r}"
+    assert secret not in text
+
+
+def test_secret_split_one_character_at_a_time_does_not_leak():
+    """Worst case for boundary alignment: every character its own chunk."""
+    secret = "AKIAIOSFODNN7EXAMPLE"
+    text, blocked = _stream(_chunks(*list(f"key {secret} done")))
+    assert blocked
+    assert "AKIAIOSFOD" not in text
+
+
+def test_benign_stream_is_delivered_complete():
+    """Holding back must DELAY output, never drop it: everything still
+    buffered is flushed when the stream ends cleanly."""
+    words = [f"word{i} " for i in range(40)]
+    text, blocked = _stream(_chunks(*words))
+    assert not blocked
+    assert text == "".join(words), "hold-back swallowed part of a clean response"
+
+
+def test_holdback_zero_restores_immediate_release():
+    """The setting is real, not decorative -- and this documents what the
+    old behaviour was."""
+    from sentinelcore.core.config import settings
+
+    secret = "AKIAIOSFODNN7EXAMPLE"
+    original = settings.stream_holdback_chars
+    try:
+        settings.stream_holdback_chars = 0
+        text, blocked = _stream(_chunks(f"Your key is {secret[:10]}", f"{secret[10:]} done"))
+        assert blocked
+        assert secret[:10] in text, "with holdback disabled the old partial leak should reappear"
+    finally:
+        settings.stream_holdback_chars = original
+
+
+def test_chunks_are_passed_through_byte_for_byte():
+    """Whole original chunks are queued, not rewritten. A client parsing
+    OpenAI's shape must see exactly what upstream sent, so the buffer
+    cannot become a compatibility problem."""
+    with respx.mock:
+        sse = _chunks("hello ", "world")
+        respx.post(UPSTREAM_CHAT_URL).mock(return_value=httpx.Response(
+            200, content=sse, headers={"content-type": "text/event-stream"}))
+        r = client.post("/v1/chat/completions",
+                        json={"model": "gpt-4", "stream": True,
+                              "messages": [{"role": "user", "content": "hello"}]})
+    sent = [line for line in sse.decode().splitlines() if line.startswith("data: ")]
+    got = [line for line in r.text.splitlines() if line.startswith("data: ")]
+    assert got == sent, f"chunks were altered in transit:\n  sent={sent}\n  got={got}"
+
+
+def test_malformed_chunk_does_not_corrupt_holdback_accounting():
+    """`delta` used to be bound only inside the try, so a chunk that failed
+    to parse left the PREVIOUS chunk's delta in scope and the buffer
+    charged this chunk with another one's characters."""
+    body = (b'data: {"choices":[{"delta":{"content":"aaaa"},"index":0}]}\n\n'
+            b'data: {not json at all\n\n'
+            b'data: {"choices":[{"delta":{"content":"bbbb"},"index":0}]}\n\n'
+            b"data: [DONE]\n\n")
+    text, blocked = _stream(body)
+    assert not blocked
+    assert text == "aaaabbbb", f"malformed chunk disturbed delivery: {text!r}"

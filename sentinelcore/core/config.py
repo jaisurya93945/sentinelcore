@@ -41,6 +41,24 @@ class Settings(BaseSettings):
     rate_limit_requests: int = 120
     rate_limit_window_seconds: int = 60
     max_request_bytes: int = 1_000_000  # 1MB; scanning cost is linear in input length
+
+    # Streaming hold-back. The proxy withholds this many characters of
+    # already-scanned output before releasing them to the client.
+    #
+    # Without it, a secret split across a chunk boundary partially leaks:
+    # measured, an AWS key streamed as "...AKIAIOSFOD" + "NN7EXAMPLE"
+    # delivered the first 10 of its 20 characters before the completed
+    # pattern was detected and the stream cut. The chunk that completes a
+    # pattern was always suppressed correctly -- the problem is the chunks
+    # already gone.
+    #
+    # The cost is latency: the client sees output roughly this many
+    # characters behind the upstream. 96 covers AWS keys (20/40), SSNs,
+    # credit cards, private-key headers and typical API keys with room to
+    # spare. Longer patterns (JWTs, private key bodies) still leak a
+    # bounded prefix -- set this higher to trade more latency for less
+    # exposure, or 0 to restore the old immediate-release behaviour.
+    stream_holdback_chars: int = 96
     # Alerting. Off unless a sink is configured; the log sink costs nothing
     # and is the sensible default for a first deployment.
     alerts_log_enabled: bool = True

@@ -17,6 +17,7 @@ import uuid
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 
+from sentinelcore.core.config import settings
 from sentinelcore.core.auth import Role, require_role
 from sentinelcore.detectors.registry import get_registered_detectors
 from sentinelcore.models.finding import Decision, EnforcementStatus, Finding
@@ -198,13 +199,29 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
 
     Two tradeoffs, real and worth stating precisely rather than vaguely:
     - The specific chunk whose content triggers a BLOCK is suppressed --
-      verified by test and by a live run, not assumed: it never reaches
-      the client. What *can* still leak is a trigger pattern split
-      across a chunk boundary (e.g. "AKIA" in one chunk, the rest of an
-      AWS key in the next) -- the first chunk alone doesn't match
-      anything, so it goes out before the second chunk completes the
-      pattern and gets caught. Scanning faster doesn't fix this; it's a
-      property of chunk boundaries not aligning with detector patterns.
+      verified by test and by a live run, not assumed.
+
+      A pattern split across a chunk boundary used to leak its prefix:
+      the first chunk matches nothing on its own, so it went out before
+      the second completed the pattern. Measured, an AWS key streamed as
+      "...AKIAIOSFOD" + "NN7EXAMPLE" delivered 10 of its 20 characters;
+      streamed one character per chunk it delivered 19 of 20.
+
+      This docstring used to say the leak was unfixable -- "scanning
+      faster doesn't fix this; it's a property of chunk boundaries".
+      Scanning was the wrong lever. The fix is to RELEASE later, not to
+      scan sooner: chunks are now queued and held until at least
+      settings.stream_holdback_chars characters of further text have
+      arrived behind them, and the queue is DISCARDED rather than
+      flushed on BLOCK. Whole original chunks are buffered rather than
+      rewritten, so clients still receive upstream's exact bytes and
+      tool-call fragments get the same protection as content.
+
+      The residual cost is latency, not exposure: output trails upstream
+      by roughly that many characters. Patterns longer than the window
+      (JWTs, private key bodies) still leak a bounded prefix -- raise the
+      setting to trade latency for exposure, or set 0 to restore the old
+      immediate-release behaviour.
     - Re-scanning the full accumulated text on every chunk is simple and
       maximally responsive, but O(n) per chunk -- O(n^2) total over a
       very long completion. Fine for typical response lengths; a real
@@ -223,6 +240,17 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
     last_risk_score = 0
     last_decision = Decision.ALLOW
 
+    # HOLD-BACK BUFFER. Chunks are scanned immediately but RELEASED late,
+    # keeping at least settings.stream_holdback_chars characters of text
+    # unsent. Whole original chunks are queued rather than rewritten, so
+    # the bytes a client receives are byte-for-byte what upstream sent --
+    # no reshaped deltas, and tool-call fragments are covered by the same
+    # mechanism as content. On BLOCK the queue is DISCARDED, which is the
+    # entire point: it holds the prefix of the pattern that just matched.
+    pending: list[tuple[str, int]] = []   # (raw data_str, characters of text it carries)
+    buffered_chars = 0
+    holdback = max(0, settings.stream_holdback_chars)
+
     async for line in stream_lines_from_upstream(
         path="/v1/chat/completions", method="POST", headers=headers, body=raw_body
     ):
@@ -231,10 +259,21 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
         data_str = line[len("data: ") :]
 
         if data_str.strip() == "[DONE]":
+            # Everything still held has already been scanned by the loop
+            # below and did not trigger a BLOCK, so it is safe to release.
+            for ds, _ in pending:
+                yield f"data: {ds}\n\n"
+            pending.clear()
             yield "data: [DONE]\n\n"
             break
 
         delta_content = ""
+        # Re-bound every iteration on purpose. Scoped to the try, it would
+        # retain the PREVIOUS chunk's value whenever parsing failed, and the
+        # hold-back accounting below would then charge this chunk with
+        # another one's characters -- a silent mis-count, which is worse
+        # than the NameError it replaced.
+        delta: dict = {}
         try:
             chunk = json.loads(data_str)
             delta = chunk["choices"][0]["delta"]
@@ -267,11 +306,25 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
             last_decision = most_severe([content_decision, tool_decision])
 
             if last_decision == Decision.BLOCK:
+                # Discard, do not flush: these chunks carry the beginning of
+                # the very pattern that just matched. Flushing them here
+                # would deliver the leak this buffer exists to prevent.
+                pending.clear()
                 yield 'data: {"choices":[{"delta":{},"finish_reason":"content_filter","index":0}]}\n\n'
                 yield "data: [DONE]\n\n"
                 break
 
-        yield f"data: {data_str}\n\n"
+        # Queue rather than emit. A chunk leaves only once enough further
+        # text has arrived behind it that any pattern it might start would
+        # already have been scanned.
+        arg_chars = sum(len((tc.get("function") or {}).get("arguments") or "")
+                        for tc in (delta.get("tool_calls") or []))
+        pending.append((data_str, len(delta_content) + arg_chars))
+        buffered_chars += len(delta_content) + arg_chars
+        while pending and buffered_chars - pending[0][1] >= holdback:
+            ds, n = pending.pop(0)
+            buffered_chars -= n
+            yield f"data: {ds}\n\n"
 
     log_scan_event(scan_id, "proxy_output_stream", last_risk_score, last_decision.value, last_findings)
 
