@@ -152,6 +152,31 @@ def _scan_tool_calls(tool_calls: list[dict]) -> tuple[list[Finding], Decision]:
     return all_findings, most_severe(decisions)
 
 
+def _substitute_assistant_content(raw: bytes, sanitized_text: str) -> bytes:
+    """Rewrites the assistant message content in an upstream response.
+
+    The response-side counterpart to _substitute_latest_user_message, and it
+    did not exist -- which is why the output path could compute a SANITIZE
+    decision and then return upstream_response.content untouched. Enforcement
+    that does not modify the bytes the client receives is cosmetic.
+
+    Returns the original bytes unchanged if the shape is not what we expect,
+    so an unfamiliar response is passed through rather than mangled. The
+    caller must therefore verify the substitution took, and does.
+    """
+    try:
+        body = json.loads(raw)
+        choices = body.get("choices") or []
+        for choice in choices:
+            msg = choice.get("message")
+            if isinstance(msg, dict) and isinstance(msg.get("content"), str):
+                msg["content"] = sanitized_text
+                return json.dumps(body).encode("utf-8")
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        pass
+    return raw
+
+
 def _substitute_latest_user_message(body: dict, sanitized_text: str) -> bytes:
     """Rewrites the latest user message's content to the sanitized text and
     re-serializes the body -- this is what makes enforcement real rather
@@ -305,6 +330,31 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
             last_risk_score = max(content_score, calculate_risk_score(tool_findings))
             last_decision = most_severe([content_decision, tool_decision])
 
+            # SANITIZE HAS TO ESCALATE HERE TOO, or `stream: true` is a
+            # bypass of the whole output pipeline.
+            #
+            # The non-streaming path sanitizes, re-scans, and escalates
+            # when cleaning reveals an attack the obfuscation was hiding.
+            # This path only ever acted on BLOCK, so the identical payload
+            # got opposite verdicts depending on one request flag.
+            # Measured: "Sure. i g n o r e   a l l   p r e v i o u s
+            # i n s t r u c t i o n s" returned 400 BLOCK without the flag
+            # and was delivered in full with it.
+            #
+            # Released chunks cannot be recalled, so rewriting the stream
+            # is not on offer -- but the ESCALATION is, and that is the
+            # half that matters. It runs on accumulated text, so the
+            # verdict is identical to the non-streaming one, and the
+            # hold-back buffer means the dangerous tail is still in
+            # `pending` and gets discarded with it.
+            if last_decision == Decision.SANITIZE and accumulated_text:
+                escalated = enforce_sanitize(accumulated_text, content_findings)
+                if escalated.decision == Decision.BLOCK:
+                    last_decision = Decision.BLOCK
+                    last_findings = escalated.findings + tool_findings
+                    last_risk_score = max(escalated.risk_score,
+                                          calculate_risk_score(tool_findings))
+
             if last_decision == Decision.BLOCK:
                 # Discard, do not flush: these chunks carry the beginning of
                 # the very pattern that just matched. Flushing them here
@@ -407,6 +457,41 @@ async def chat_completions(request: Request):
     output_risk_score = max(output_risk_score, calculate_risk_score(tool_findings))
     output_decision = most_severe([content_decision, tool_decision])
 
+    # SANITIZE on the OUTPUT path used to fall straight through to the
+    # return below, handing the client upstream's original bytes while the
+    # X-SentinelCore-Output-Decision header said "sanitize" -- and there was
+    # no output enforcement-status header at all, though the INPUT side has
+    # one. So the response announced an action it had not taken, and offered
+    # the client no way to notice. Measured before this fix: a response with
+    # character-spacing evasion returned decision=sanitize, risk 36, body
+    # byte-identical to upstream.
+    output_enforcement = EnforcementStatus.NOT_APPLICABLE
+    output_body = upstream_response.content
+
+    if output_decision == Decision.SANITIZE and assistant_text:
+        san = enforce_sanitize(assistant_text, output_findings)
+        output_enforcement = san.enforcement_status
+        output_findings = san.findings
+        output_risk_score = max(san.risk_score, calculate_risk_score(tool_findings))
+        output_decision = most_severe([san.decision, tool_decision])
+        for f in output_findings:
+            if not f.origin:
+                f.origin = "output"
+
+        if san.enforcement_status in (EnforcementStatus.ENFORCED, EnforcementStatus.ESCALATED):
+            rewritten = _substitute_assistant_content(upstream_response.content, san.sanitized_text)
+            if rewritten is upstream_response.content:
+                # The shape was unfamiliar, so nothing was rewritten. Saying
+                # ENFORCED here would be the exact lie this block removes.
+                output_enforcement = EnforcementStatus.NOT_IMPLEMENTED
+            else:
+                output_body = rewritten
+
+    # Logged AFTER enforcement, not before. Sanitizing can escalate
+    # SANITIZE to BLOCK, and an audit trail that records the decision the
+    # engine first reached rather than the one it acted on is exactly the
+    # kind of record that is worse than none -- an incident review would
+    # read "sanitize" for a request that was refused.
     log_scan_event(
         scan_id,
         "proxy_output",
@@ -425,11 +510,15 @@ async def chat_completions(request: Request):
     response_headers["X-SentinelCore-Input-Enforcement-Status"] = enforcement_status.value
     response_headers["X-SentinelCore-Output-Decision"] = output_decision.value
     response_headers["X-SentinelCore-Output-Risk-Score"] = str(output_risk_score)
+    # Always emitted, including NOT_APPLICABLE. Its absence was what let a
+    # SANITIZE decision look enforced, and a header that appears only
+    # sometimes cannot be relied on by a client.
+    response_headers["X-SentinelCore-Output-Enforcement-Status"] = output_enforcement.value
     response_headers.pop("content-length", None)
     response_headers.pop("Content-Length", None)
 
     return Response(
-        content=upstream_response.content,
+        content=output_body,
         status_code=upstream_response.status_code,
         headers=response_headers,
     )
