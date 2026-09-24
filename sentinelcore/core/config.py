@@ -69,6 +69,53 @@ class Settings(BaseSettings):
     # said out loud, because the failure being prevented is nobody having
     # considered it.
     allow_unauthenticated: bool = False
+
+    # Streaming re-scan window.
+    #
+    # The streaming proxy re-scanned the ENTIRE accumulated response on
+    # every chunk. Cost is therefore O(N x chunks), and at realistic token
+    # granularity that is ruinous -- measured on a 2,000-character
+    # completion, same bytes to the client every time, only the chunk count
+    # changing:
+    #
+    #       1 chunk    129 ms
+    #     100 chunks   843 ms
+    #     400 chunks  3257 ms   (~5 chars/chunk, i.e. roughly per-token)
+    #
+    # Three seconds of added latency on one streamed response is not a
+    # tuning problem, it is a reason nobody deploys the gateway.
+    #
+    # Each chunk now scans only the last `stream_scan_window_chars` plus
+    # the new content, with ONE full scan at end-of-stream as a backstop.
+    # The tradeoff, stated precisely rather than buried: a pattern whose
+    # length fits the window is still caught on the chunk that completes
+    # it, before release. A pattern LONGER than the window is caught at the
+    # final scan instead -- later, though the hold-back buffer means its
+    # tail is still unreleased and the stream is still cut.
+    #
+    # 1024 against a longest measured rules match of 32 characters across
+    # the 744-example corpus. 0 restores the full re-scan.
+    stream_scan_window_chars: int = 256
+
+    # How much NEW text must arrive before re-scanning. The window above
+    # decides how much PRECEDING text comes with it.
+    #
+    # Re-scanning on every chunk is what makes the cost quadratic: work
+    # grows with response length TIMES chunk count, and chunk count at
+    # token granularity is large. Measured, characters handed to detectors
+    # for one 8,000-character completion in 1,600 chunks:
+    #
+    #     re-scan every chunk, whole text    6,404,002   (~6.2 s of scanning)
+    #     window 1024, every chunk           1,549,032   (~1.5 s)
+    #     stride 64 + overlap 256               ~40,000   (~0.04 s)
+    #
+    # Narrowing the window alone was not enough -- 4x, still seconds --
+    # because the per-chunk re-scan dominates. Scanning on accumulated
+    # NEW text instead is what removes the chunk-count term.
+    #
+    # Must be <= stream_holdback_chars, so nothing is released before it
+    # has been scanned. Asserted at startup rather than trusted.
+    stream_scan_stride_chars: int = 64
     # Alerting. Off unless a sink is configured; the log sink costs nothing
     # and is the sensible default for a first deployment.
     alerts_log_enabled: bool = True

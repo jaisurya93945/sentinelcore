@@ -24,6 +24,12 @@ Every entry here corresponds to a real, tested commit — see `git log` for the 
 
 - **SANITIZE was a label with nothing behind it on the tool-call and MCP paths.** Both returned `decision: sanitize` with `enforcement_status: not_applicable` and no sanitized output — the exact "decision reported as completed action" failure `EnforcementStatus` exists to prevent. Tool arguments are now rebuilt field by field and re-scanned; MCP tool descriptions are cleaned and re-scanned, where the escalation is the point: a description hiding an instruction override behind character spacing scored as mild obfuscation and reported SANITIZE, and now correctly BLOCKs with `sanitized_description` showing what the model would have read. **Still open:** the streaming path has no SANITIZE branch; treat SANITIZE there as refusal.
 
+### Performance
+
+- **The streaming proxy did 137× more work than it needed to.** It re-scanned the entire accumulated response on every chunk — its own docstring called this "a real scaling concern" and nobody measured it. Measured: one 8,000-character completion at roughly token granularity handed detectors **6,404,002 characters**, several seconds of scanning for a single response. A gateway in the path of every LLM call that adds seconds to every streamed response does not get deployed, whatever its verdicts. Scanning is now triggered by how much *new* text has arrived (`SENTINELCORE_STREAM_SCAN_STRIDE_CHARS`, 64) over a tail window (`SENTINELCORE_STREAM_SCAN_WINDOW_CHARS`, 256), with a full scan at end-of-stream as a backstop: 46,851 characters for the same completion. Detection parity with the exhaustive path is asserted, not assumed.
+
+- **First performance measurement in the project.** `scripts/benchmark_performance.py` and `docs/PERFORMANCE.md`. Scan latency is linear at 0.85 µs/char — a 2 KB prompt costs under 2 ms, and linearity matters because a superlinear detector would make a large prompt a denial-of-service vector against the gateway itself. Reported in characters scanned rather than milliseconds: an earlier version timed requests through the test client and reported 3.2 seconds, which profiling showed was about nine-tenths harness overhead.
+
 ### Added
 
 - `SENTINELCORE_STREAM_HOLDBACK_CHARS` (default 96) — trades streaming latency against leak exposure; 0 restores v0.4.0 behaviour.

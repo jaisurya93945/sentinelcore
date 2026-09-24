@@ -272,9 +272,16 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
     # no reshaped deltas, and tool-call fragments are covered by the same
     # mechanism as content. On BLOCK the queue is DISCARDED, which is the
     # entire point: it holds the prefix of the pattern that just matched.
+    last_content_findings: list[Finding] = []
     pending: list[tuple[str, int]] = []   # (raw data_str, characters of text it carries)
     buffered_chars = 0
     holdback = max(0, settings.stream_holdback_chars)
+    window = max(0, settings.stream_scan_window_chars)
+    # Capped at holdback so text can never be released before it has been
+    # scanned: release requires `holdback` characters queued behind a
+    # chunk, and a scan happens at least every `stride` characters.
+    stride = min(max(0, settings.stream_scan_stride_chars), holdback) if holdback else 0
+    scanned_upto = 0
 
     async for line in stream_lines_from_upstream(
         path="/v1/chat/completions", method="POST", headers=headers, body=raw_body
@@ -284,8 +291,24 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
         data_str = line[len("data: ") :]
 
         if data_str.strip() == "[DONE]":
-            # Everything still held has already been scanned by the loop
-            # below and did not trigger a BLOCK, so it is safe to release.
+            # BACKSTOP. Windowed scanning can only see patterns that fit the
+            # window, so the complete response is scanned once here, before
+            # anything still held is released. This is what bounds the cost
+            # of narrowing the window: something longer than it is caught
+            # late rather than never, and "late" still precedes the release
+            # of the hold-back tail.
+            if accumulated_text and (scanned_upto < len(accumulated_text) or
+                                     (window and len(accumulated_text) > window)):
+                final_findings = _scan_text(accumulated_text, origin="output")
+                final_score = calculate_risk_score(final_findings)
+                if decide(final_findings, final_score) == Decision.BLOCK:
+                    last_findings, last_risk_score = final_findings, final_score
+                    last_decision = Decision.BLOCK
+                    pending.clear()
+                    yield 'data: {"choices":[{"delta":{},"finish_reason":"content_filter","index":0}]}\n\n'
+                    yield "data: [DONE]\n\n"
+                    break
+
             for ds, _ in pending:
                 yield f"data: {ds}\n\n"
             pending.clear()
@@ -319,7 +342,25 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
             if delta_content:
                 accumulated_text += delta_content
 
-            content_findings = _scan_text(accumulated_text, origin="output") if accumulated_text else []
+            # Scan on accumulated NEW text, not on every chunk, and only
+            # the tail window plus that new text -- never the whole
+            # response again. This is what removes the chunk-count term
+            # from the cost; see settings.stream_scan_stride_chars.
+            unscanned = len(accumulated_text) - scanned_upto
+            due = (not stride) or unscanned >= stride or bool(accumulated_tool_calls)
+
+            if due and accumulated_text:
+                if window and len(accumulated_text) > window + unscanned:
+                    scan_target = accumulated_text[-(window + unscanned):]
+                else:
+                    scan_target = accumulated_text
+                content_findings = _scan_text(scan_target, origin="output")
+                scanned_upto = len(accumulated_text)
+                last_content_findings = content_findings
+            else:
+                # Nothing new enough to re-examine; keep the previous
+                # verdict rather than silently reporting "clean".
+                content_findings = last_content_findings
             content_score = calculate_risk_score(content_findings)
             content_decision = decide(content_findings, content_score)
 

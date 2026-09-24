@@ -1,0 +1,107 @@
+{
+  "version": "0.4.1",
+  "commit": "ea48444",
+  "config": {
+    "stream_holdback_chars": 96,
+    "stream_scan_window_chars": 256,
+    "stream_scan_stride_chars": 64
+  },
+  "caveat": "single machine, mocked upstream; no concurrency, no real-network latency",
+  "scan_latency": [
+    {
+      "input_chars": 100,
+      "iterations": 50,
+      "mean_ms": 0.102,
+      "p50_ms": 0.095,
+      "p95_ms": 0.131,
+      "p99_ms": 0.144,
+      "us_per_char": 1.0163
+    },
+    {
+      "input_chars": 500,
+      "iterations": 50,
+      "mean_ms": 0.454,
+      "p50_ms": 0.445,
+      "p95_ms": 0.549,
+      "p99_ms": 0.67,
+      "us_per_char": 0.9086
+    },
+    {
+      "input_chars": 2000,
+      "iterations": 12,
+      "mean_ms": 1.709,
+      "p50_ms": 1.717,
+      "p95_ms": 1.772,
+      "p99_ms": 1.772,
+      "us_per_char": 0.8547
+    },
+    {
+      "input_chars": 10000,
+      "iterations": 10,
+      "mean_ms": 8.733,
+      "p50_ms": 8.47,
+      "p95_ms": 11.041,
+      "p99_ms": 11.041,
+      "us_per_char": 0.8733
+    },
+    {
+      "input_chars": 50000,
+      "iterations": 10,
+      "mean_ms": 42.381,
+      "p50_ms": 42.378,
+      "p95_ms": 42.943,
+      "p99_ms": 42.943,
+      "us_per_char": 0.8476
+    }
+  ],
+  "streaming": [
+    {
+      "response_chars": 2000,
+      "chunks": 400,
+      "chars_scanned": 10998,
+      "scan_calls": 32,
+      "chars_scanned_rescan_every_chunk": 401002,
+      "reduction": 36.5
+    },
+    {
+      "response_chars": 8000,
+      "chunks": 1600,
+      "chars_scanned": 46851,
+      "scan_calls": 125,
+      "chars_scanned_rescan_every_chunk": 6404002,
+      "reduction": 136.7
+    },
+    {
+      "response_chars": 20000,
+      "chunks": 4000,
+      "chars_scanned": 117915,
+      "scan_calls": 309
+    }
+  ],
+  "detection_parity": [
+    {
+      "case": "aws_key_late",
+      "incremental": "block",
+      "rescan_every_chunk": "block",
+      "agree": true
+    },
+    {
+      "case": "injection_late",
+      "incremental": "block",
+      "rescan_every_chunk": "block",
+      "agree": true
+    },
+    {
+      "case": "spaced_injection",
+      "incremental": "block",
+      "rescan_every_chunk": "block",
+      "agree": true
+    },
+    {
+      "case": "benign",
+      "incremental": "pass",
+      "rescan_every_chunk": "pass",
+      "agree": true
+    }
+  ]
+}
