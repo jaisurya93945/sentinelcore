@@ -26,10 +26,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from sentinelcore.core.auth import Role, require_role
 from sentinelcore.detectors.registry import get_registered_detectors
-from sentinelcore.models.finding import Finding, MCPToolResult, MCPToolScanRequest, MCPToolScanResult
+from sentinelcore.models.finding import (Decision, EnforcementStatus, Finding, MCPToolResult,
+                                          MCPToolScanRequest, MCPToolScanResult)
 from sentinelcore.services.audit_log import log_scan_event
 from sentinelcore.services.policy_engine import decide
 from sentinelcore.services.risk_engine import calculate_risk_score
+from sentinelcore.services.sanitizer import enforce_sanitize
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -155,8 +157,30 @@ def scan_mcp_tools(payload: MCPToolScanRequest) -> MCPToolScanResult:
 
         risk_score = calculate_risk_score(findings)
         decision = decide(findings, risk_score)
+        enforcement = EnforcementStatus.NOT_APPLICABLE
+        sanitized: str | None = None
 
-        result.tools.append(MCPToolResult(name=tool.name, findings=findings, risk_score=risk_score, decision=decision))
+        # SANITIZE used to fall through here with nothing behind it, exactly
+        # as it did on the tool-call path. It matters more than it looks on
+        # an advisory endpoint: the ESCALATION is the point. A description
+        # hiding "ignore all previous instructions" behind character
+        # spacing scores as mild obfuscation and reports SANITIZE, while
+        # the text the MODEL will actually read is an instruction override.
+        # Cleaning and re-scanning is what turns that into the BLOCK it is.
+        if decision == Decision.SANITIZE:
+            san = enforce_sanitize("\n".join(t for t in texts if t), findings)
+            enforcement = san.enforcement_status
+            sanitized = san.sanitized_text
+            findings = san.findings
+            risk_score = san.risk_score
+            decision = san.decision
+            for f in findings:
+                f.origin = f"tool_description:{tool.name}"
+
+        result.tools.append(MCPToolResult(
+            name=tool.name, findings=findings, risk_score=risk_score, decision=decision,
+            enforcement_status=enforcement, sanitized_description=sanitized,
+        ))
         log_scan_event(result.scan_id, "mcp_tools", risk_score, decision.value, findings, detail=tool.name)
 
     return result

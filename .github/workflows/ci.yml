@@ -59,6 +59,30 @@ jobs:
           SENTINELCORE_REQUIRE_ML: "1"
         run: pytest tests/ -q --cov=sentinelcore --cov-report=term-missing
 
+  # Catches the bug class that produced two NameErrors in a single session.
+  #
+  # Both were the same shape: a symbol used inside a function body but never
+  # imported. `import sentinelcore.main` succeeds, every existing test
+  # passes, and the failure only appears when that specific branch runs --
+  # `settings` in the streaming proxy, `EnforcementStatus` in the MCP
+  # endpoint. The second was found by exercising the endpoint by hand. There
+  # is no reason to rely on that.
+  #
+  # F821 is the rule that matters and the codebase had zero violations, so
+  # this gate cost nothing to adopt. The rest of the F (pyflakes) set --
+  # unused imports and variables, f-strings without placeholders -- was
+  # cleaned in the same commit; a gate that starts out red gets ignored.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - name: Undefined names, unused imports, dead assignments
+        run: ruff check --select F sentinelcore/ scripts/ tests/
+
   # The PostgreSQL backend was shipped as IMPLEMENTED, NOT INTEGRATION-TESTED
   # because no server was reachable where it was written. Its 13 tests --
   # including the only LIVE evidence that tenant isolation holds on the

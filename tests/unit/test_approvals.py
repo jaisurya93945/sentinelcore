@@ -8,7 +8,6 @@ reported as though a human approved something. Every non-approved state
 
 import time
 
-import pytest
 from fastapi.testclient import TestClient
 
 from sentinelcore.core.config import settings

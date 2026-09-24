@@ -10,7 +10,7 @@ import json
 import re
 from pathlib import Path
 
-from sentinelcore.assess.base import (CONFIG_SUFFIXES, AssessmentFinding, Check, CheckResult,
+from sentinelcore.assess.base import (AssessmentFinding, Check, CheckResult,
                                       Severity, read_text, suppressed)
 
 

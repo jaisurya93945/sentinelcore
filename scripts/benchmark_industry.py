@@ -137,7 +137,7 @@ def main():
                     ("SentinelCore learned @0.8", ours80)]:
         print(f"{name:<32}{m['precision']:>8.1%}{m['recall']:>9.1%}{m['f1']:>9.1%}{m['fpr']:>9.1%}")
 
-    print(f"\n=== CONFIDENCE DISTRIBUTION (Findings 8/9) ===")
+    print("\n=== CONFIDENCE DISTRIBUTION (Findings 8/9) ===")
     print(f"{'':<32}{'distinct':>10}{'in 0.5-0.8':>12}")
     print(f"{'Meta Prompt Guard 2':<32}{pg_distinct:>10}{pg_ambiguous:>12}")
     print(f"{'SentinelCore learned':<32}{ours_distinct:>10}{ours_ambiguous:>12}")

@@ -80,6 +80,10 @@ def test_export_skips_records_without_text():
         n = fb.export_hard_negatives(str(out))
         exported_ids = [json.loads(l)["metadata"]["scan_id"] for l in out.read_text().splitlines()]
     assert "scan-6" not in exported_ids
+    # The return value was being discarded. A count that disagrees with the
+    # file would mean the exporter is reporting work it did not do, which
+    # matters here: this corpus feeds retraining.
+    assert n == len(exported_ids)
 
 
 # --- API contract ---

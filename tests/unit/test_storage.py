@@ -7,7 +7,6 @@ retention that bounds growth without deleting outside policy, and failure
 behaviour that is visible rather than silent.
 """
 
-import os
 import sqlite3
 import threading
 
@@ -15,8 +14,8 @@ import pytest
 
 from sentinelcore.core.config import settings
 from sentinelcore.storage import (QueryFilters, RetentionPolicy, StorageUnavailable,
-                                  get_store, maybe_run_retention, reset_store, storage_health)
-from sentinelcore.storage.migrations import (LATEST_VERSION, MIGRATIONS, pending,
+                                  get_store, reset_store, storage_health)
+from sentinelcore.storage.migrations import (LATEST_VERSION, pending,
                                              verify_non_destructive, verify_ordering)
 from sentinelcore.storage.sqlite_backend import SQLiteStore
 

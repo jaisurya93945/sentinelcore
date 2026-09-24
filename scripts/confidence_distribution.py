@@ -83,7 +83,7 @@ def main():
     l = result["learned"]["ambiguous_share_of_findings"]
     print(f"{'ambiguous share of findings':<28}{s:>11.1%}{l:>12.1%}")
 
-    print(f"\nobserved provenance gain:   semantic +1.2pp    learned +11.8pp")
+    print("\nobserved provenance gain:   semantic +1.2pp    learned +11.8pp")
     print("\nMechanism predicts the detector with the SMALLER ambiguous share")
     print("should show the SMALLER provenance gain.")
     if s < l:

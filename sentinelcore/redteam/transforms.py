@@ -36,7 +36,6 @@ import base64
 import hashlib
 import random
 import re
-import unicodedata
 from dataclasses import dataclass
 from enum import Enum
 

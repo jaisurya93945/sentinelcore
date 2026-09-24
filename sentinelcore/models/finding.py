@@ -196,6 +196,16 @@ class MCPToolResult(BaseModel):
     findings: list[Finding] = Field(default_factory=list)
     risk_score: int = 0
     decision: Decision = Decision.ALLOW
+    enforcement_status: EnforcementStatus = Field(default=EnforcementStatus.NOT_APPLICABLE)
+    sanitized_description: str | None = Field(
+        default=None,
+        description=(
+            "Set when a SANITIZE decision was carried out: the tool description with "
+            "the obfuscation removed. Worth reading -- a description that needed "
+            "sanitizing was written to look harmless to whoever reviewed it, and the "
+            "cleaned form is what the model would actually have acted on."
+        ),
+    )
 
 
 class MCPToolScanResult(BaseModel):

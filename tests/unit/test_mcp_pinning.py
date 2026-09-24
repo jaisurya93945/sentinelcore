@@ -7,9 +7,7 @@ sees it -- the scan already happened, and the new text may contain nothing
 the detectors flag. What is anomalous is the CHANGE.
 """
 
-import json
 
-import pytest
 from fastapi.testclient import TestClient
 
 from sentinelcore.core.config import settings

@@ -1,6 +1,5 @@
 """Assessment runner and report rendering."""
 
-import json
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -94,7 +93,7 @@ _ICON = {Severity.CRITICAL: "CRIT", Severity.HIGH: "HIGH", Severity.MEDIUM: "MED
 
 
 def render(report: Assessment, show_limitations: bool = True) -> str:
-    lines = [f"SentinelCore pre-deployment assessment", f"  {report.root}",
+    lines = ["SentinelCore pre-deployment assessment", f"  {report.root}",
              f"  {report.files_examined} files, {len(report.checks_run)} checks, "
              f"{report.duration_seconds:.2f}s", ""]
 

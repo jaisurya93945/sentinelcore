@@ -120,7 +120,7 @@ def main():
         print("\nOPENAI_API_KEY is not set. Export it and re-run.")
         sys.exit(1)
 
-    print(f"\nProceeding. Ctrl-C now to abort.\n")
+    print("\nProceeding. Ctrl-C now to abort.\n")
     settings.semantic_detector_enabled = True
 
     import time as _time
@@ -174,13 +174,13 @@ def main():
     if missing:
         reason = "daily quota exhausted" if quota_hit else "run limit reached"
         print(f"\n  PARTIAL: {len(probs)}/{len(texts)} classified, {missing} outstanding ({reason}).")
-        print(f"  Everything classified so far is CACHED -- re-running will not re-request it.")
+        print("  Everything classified so far is CACHED -- re-running will not re-request it.")
         print(f"  Resume later with the same command; only the {missing} outstanding will be requested.")
         if len(probs) < 30:
             print("\n  Too few results to report meaningful metrics. Stopping.")
             sys.exit(2)
         print(f"  Reporting metrics on the {len(probs)} classified so far -- these are PARTIAL")
-        print(f"  and not comparable to the full-split numbers until the run completes.")
+        print("  and not comparable to the full-split numbers until the run completes.")
 
     prec = tp / (tp + fp) if (tp + fp) else 0.0
     rec = tp / (tp + fn) if (tp + fn) else 0.0

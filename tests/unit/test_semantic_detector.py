@@ -6,7 +6,6 @@ path is exercised directly. A detector that can only be tested by spending
 money is a detector that stops being tested.
 """
 
-import json
 
 import pytest
 

@@ -133,7 +133,7 @@ class PostgresStore(Store):
                     cur.execute("SELECT MAX(version) FROM schema_migrations")
                     version = cur.fetchone()[0] or 0
             reachable, err = True, None
-        except Exception as e:
+        except Exception:
             version, reachable = -1, False
             # The message can embed the connection string; redact it.
             err = safe_url(self.url) + " unreachable"

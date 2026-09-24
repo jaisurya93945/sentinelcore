@@ -148,7 +148,7 @@ def main():
               f"fpr {f['mean']:.1%} [{f['ci95'][0]:.1%},{f['ci95'][1]:.1%}]")
 
     rb = result["rules_baseline_test"]
-    print(f"\nRULES baseline on same test splits:")
+    print("\nRULES baseline on same test splits:")
     print(f"  recall {rb['recall']['mean']:.1%} [{rb['recall']['ci95'][0]:.1%},{rb['recall']['ci95'][1]:.1%}]   "
           f"fpr {rb['fpr']['mean']:.1%} [{rb['fpr']['ci95'][0]:.1%},{rb['fpr']['ci95'][1]:.1%}]")
     print(f"\nwritten to {OUT}")

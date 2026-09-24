@@ -43,7 +43,6 @@ a component that is optional by design.
 import logging
 from pathlib import Path
 
-from sentinelcore.core.config import settings
 from sentinelcore.core.context import detector_enabled
 from sentinelcore.detectors.base import BaseDetector
 from sentinelcore.detectors.registry import register_detector

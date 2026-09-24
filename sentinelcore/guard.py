@@ -183,7 +183,6 @@ class Guard:
         """Two independent checks, most-severe-wins: deterministic
         name-based authorization, and content scanning of the serialized
         arguments. The model never decides its own authorization."""
-        import json
 
         findings: list[Finding] = []
         with self._active():

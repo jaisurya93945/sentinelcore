@@ -151,7 +151,7 @@ Fixed in `sentinelcore/core/textextract.py`, which walks the structure and yield
 - The tool-argument detector runs on all text, not just tool arguments -- false-positive risk on ordinary technical chat.
 - No blanket policy.yaml rules for tool_arguments categories, deliberately -- severity gradient drives the threshold response instead.
 - SANITIZE **is** now enforced on this path: the arguments are rebuilt with each string cleaned, re-scanned, and escalated if the cleaned form still trips the policy. `sanitized_arguments` carries the result; its absence means nothing was sanitized. A SANITIZE decision with `enforcement_status: not_implemented` — which is what a SANITIZE coming from the tool-NAME policy produces, since there is no content finding to clean — is a refusal, not permission.
-- **Still open: `POST /api/v1/scan/mcp-tools` and the streaming path have no SANITIZE branch.** A SANITIZE decision there returns no sanitized output and must be treated as refusal.
+- **Still open: the streaming path has no SANITIZE branch.** A SANITIZE decision there returns no sanitized output and must be treated as refusal. (`POST /api/v1/scan/mcp-tools` now enforces it: see the MCP section.)
 - No intent alignment (comparing what the user asked for against what the agent is about to do) -- needs semantic understanding, not regex.
 - No tool chaining, step limits, or session tracking.
 
