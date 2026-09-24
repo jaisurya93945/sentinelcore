@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 import sentinelcore.detectors  # noqa: F401  -- importing this triggers detector self-registration
 from sentinelcore.api.v1 import approvals, audit, dashboard, feedback, health, mcp, proxy, scan, tool_call
+from sentinelcore.core.auth import enforce_auth_required
 from sentinelcore.core.config import settings
 from sentinelcore.core.middleware import resource_protection_middleware
 from sentinelcore.services.alerts import get_manager, logging_sink, slack_sink, webhook_sink
@@ -35,6 +36,12 @@ def _configure_alerts() -> None:
 
 
 _configure_alerts()
+
+# Checked at startup, not at first request. An operator who has just run
+# `docker run` should learn that their gateway is open from the first lines
+# of its log, not from an incident -- and outside development this refuses
+# to start rather than warning. See core/auth.enforce_auth_required.
+enforce_auth_required()
 
 app.middleware("http")(resource_protection_middleware)
 

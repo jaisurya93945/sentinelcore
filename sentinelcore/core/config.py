@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     # bounded prefix -- set this higher to trade more latency for less
     # exposure, or 0 to restore the old immediate-release behaviour.
     stream_holdback_chars: int = 96
+
+    # Escape hatch for enforce_auth_required(). Outside development, a
+    # gateway with no API keys refuses to start: every role check is
+    # skipped, which leaves the audit log and MCP baselines readable by
+    # anyone who can open a socket, and the shipped container binds
+    # 0.0.0.0. Running that way deliberately is legitimate -- behind a
+    # service mesh that already authenticates, say -- but it has to be
+    # said out loud, because the failure being prevented is nobody having
+    # considered it.
+    allow_unauthenticated: bool = False
     # Alerting. Off unless a sink is configured; the log sink costs nothing
     # and is the sensible default for a first deployment.
     alerts_log_enabled: bool = True

@@ -10,6 +10,7 @@ is to put it in CI:
     3  usage or configuration error
 """
 
+import textwrap
 import argparse
 import json
 import sys
@@ -223,12 +224,21 @@ def _doctor(as_json: bool) -> int:
             checks[name] = {"ok": False, "extra": extra}
 
     from sentinelcore import __version__
+    from sentinelcore.core.auth import unauthenticated_exposure
     from sentinelcore.detectors.registry import get_registered_detectors
 
     detectors = sorted(get_registered_detectors())
 
+    # `doctor` exists to tell an operator what is wrong before it matters,
+    # and an unauthenticated gateway is the largest thing it can find. Auth
+    # being off by default was documented in the repository and reported by
+    # nothing at runtime, which is not the same as being known.
+    exposure = unauthenticated_exposure()
+
     if as_json:
-        print(json.dumps({"version": __version__, "checks": checks, "detectors": detectors}, indent=2))
+        print(json.dumps({"version": __version__, "checks": checks, "detectors": detectors,
+                          "authenticated": exposure is None,
+                          "unauthenticated_exposure": exposure}, indent=2))
     else:
         print(f"sentinelcore {__version__}\n")
         for name, c in checks.items():
@@ -236,6 +246,12 @@ def _doctor(as_json: bool) -> int:
             hint = "" if c["ok"] or not c["extra"] else f"   (pip install 'sentinelcore-ai[{c['extra']}]')"
             print(f"  [{mark}] {name}{hint}")
         print(f"\n  registered detectors: {', '.join(detectors)}")
+        if exposure:
+            print("\n  [WARN] running UNAUTHENTICATED")
+            for line in textwrap.wrap(exposure, 74):
+                print(f"         {line}")
+        else:
+            print("\n  [ok ] authentication configured")
         if not checks["core"]["ok"]:
             print("\n  core import failed -- installation is broken")
     return 0 if checks["core"]["ok"] else 3
