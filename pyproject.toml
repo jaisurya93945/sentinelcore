@@ -11,7 +11,7 @@
 # every line of code, doc and example is unaffected:
 #     pip install sentinelcore-ai   ->   import sentinelcore
 name = "sentinelcore-ai"
-version = "0.4.0"
+version = "0.4.1"
 description = "A security control plane for LLM and agent applications: detection, provenance, risk, authorization, policy and enforcement."
 readme = "README.md"
 requires-python = ">=3.11"

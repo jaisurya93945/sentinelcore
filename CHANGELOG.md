@@ -4,7 +4,41 @@ Every entry here corresponds to a real, tested commit — see `git log` for the 
 
 **Two separate things are versioned in this project, on purpose:** the package version below (semver, tracks the whole application) and the Attack Replay Lab's detector-pattern tags (`v0.1`/`v0.2`/`v0.3` inside `dataset/processed/replay_snapshots/`, tracking prompt_injection/obfuscation pattern iterations specifically). They share number formats by coincidence, not by design — don't read "package v0.3.0" and "detector patterns v0.3" as the same axis.
 
-## Unreleased
+## v0.4.1 — unreleased
+
+**A security release.** Every item below was reachable in v0.4.0, which is published on PyPI as `sentinelcore-ai`. Each was found by investigating a *documented* limitation rather than by a failing test — the suite was green throughout.
+
+### Security
+
+- **Obfuscated tool arguments were invisible to every detector, on all three integration paths.** `json.dumps()` (API endpoint, `Guard` SDK) and `str()` (proxy) escape non-ASCII back into ASCII before the text reached a detector, so the obfuscation detector received `\u200b` as six ASCII characters where a zero-width space had been. Identical text scored risk 60 and BLOCK via `/api/v1/scan` and **risk 0 with no findings** via `/api/v1/scan/tool-call`. `json.dumps` hid zero-width, bidi *and* homoglyph attacks; `str()` hid the non-printable families. This landed on the path carrying the project's highest provenance multiplier (1.8x) precisely because it is the most dangerous origin. Fixed in `core/textextract.py`, which walks the structure and yields the real strings. 19 regression tests; 11 fail against the pre-fix code, and the proxy fails on exactly the two non-printable families — matching the mechanism rather than merely going red.
+
+- **The streaming proxy leaked the prefix of a secret it then blocked.** The chunk that *completes* a pattern was always suppressed correctly; the chunks already sent were not. An AWS key split as `...AKIAIOSFOD` + `NN7EXAMPLE` delivered 10 of its 20 characters, and **19 of 20** when streamed one character per chunk. The docstring had recorded this as unfixable — "scanning faster doesn't fix this" — which is true of scanning and irrelevant: the fix is to *release* later. Chunks are now queued and held until `stream_holdback_chars` (default 96) characters sit behind them, and the queue is discarded rather than flushed on BLOCK. Whole original chunks are buffered, not rewritten, so clients receive upstream's exact bytes.
+
+- **The sanitizer turned detectable attacks into undetectable ones.** `_collapse_character_spacing` began with `text.split()`, discarding how much whitespace separated each token — but attackers space words more widely than letters, and that gap is the only word boundary. `i g n o r e   a l l   p r e v i o u s` collapsed to `Ignoreallpreviousinstructions`, which matches no phrase pattern, so the sanitizer reported ENFORCED while returning text that still carried the attack and the mandatory re-scan had nothing to escalate on. Strictly worse than not sanitizing. A 2+ character gap now ends the word. A test that had *pinned* the old behaviour now asserts the new one.
+
+- **SANITIZE was a label with nothing behind it on the tool-call and MCP paths.** Both returned `decision: sanitize` with `enforcement_status: not_applicable` and no sanitized output — the exact "decision reported as completed action" failure `EnforcementStatus` exists to prevent. Tool arguments are now rebuilt field by field and re-scanned; MCP tool descriptions are cleaned and re-scanned, where the escalation is the point: a description hiding an instruction override behind character spacing scored as mild obfuscation and reported SANITIZE, and now correctly BLOCKs with `sanitized_description` showing what the model would have read. **Still open:** the streaming path has no SANITIZE branch; treat SANITIZE there as refusal.
+
+### Added
+
+- `SENTINELCORE_STREAM_HOLDBACK_CHARS` (default 96) — trades streaming latency against leak exposure; 0 restores v0.4.0 behaviour.
+- **PostgreSQL is integration-tested for the first time.** Its 13 tests had never executed anywhere, including the only live evidence that tenant isolation holds on the production backend — everything else was a static source check. They now run in CI against a `postgres:16` service, with `SENTINELCORE_REQUIRE_POSTGRES=1` turning a missing server into a hard error rather than 13 quiet skips under a green tick. Mutation-checked: removing a tenant filter from the scan-events or approvals query fails the corresponding test.
+- A `ruff --select F` CI gate. Two `NameError`s this cycle shared a shape the test suite cannot catch — a symbol used in a function body and never imported, where the module still imports and every test still passes. F821 catches it and the codebase had zero existing violations.
+- Python 3.14 in the CI matrix as a non-blocking entry. `requires-python = ">=3.11"` has no upper bound, so pip already installs on 3.14 while nothing tested it. No `Python :: 3.14` classifier until those runs are green — that would be a support claim ahead of the data.
+- `scripts/verify_published.py`. The previous hand-written verification could not fail: run from a clone, `python -c "import sentinelcore"` resolves to the working tree, so an *empty* virtualenv passed it.
+
+### Fixed
+
+- `docs/CAPABILITY_MATRIX.md` claimed 154 tests, 5 detectors, 8 endpoints and 98% coverage; measured, 481 / 7 / 23 / **85%**. Coverage genuinely fell as the codebase tripled, and is now recorded as the drop it is. Two caveats were false and are withdrawn; six "Planned, Not Implemented" entries had shipped. A test now asserts the stated count equals what pytest collects.
+- CI triggered only on `main` while the branch was `master`, so every push ran zero checks and an absent run looked like a passing one. It also installed `requirements-dev.txt` and ran `pytest --cov=app` against a package that does not exist here.
+- The dependency audit covered core dependencies and test tooling only — the `ml`, `semantic` and `postgres` extras ship to users and were never scanned, nor was anything transitive: 70 resolved packages against 9 lines of `requirements-dev.txt`.
+
+### Changed
+
+- **Distribution renamed to `sentinelcore-ai`.** PyPI refuses `sentinelcore`: its similarity check deletes `. _ -` and folds `l/I/1` and `O/0`, so the name collapses to the same string as the unrelated `sentinel-core` and is unregisterable by anyone. The import name is unchanged — `pip install sentinelcore-ai`, `import sentinelcore`. A hyphen typo installs someone else's package, which is worth knowing for a security tool.
+
+## v0.4.0 — 2026-09-23
+
+First PyPI release, as `sentinelcore-ai`.
 
 Working through `docs/hardening/MASTER_PROMPT.md`-derived hardening selectively, not exhaustively — see `docs/hardening/STATUS.md` for which sections were tackled and which were explicitly declined, with reasoning, rather than attempted and faked.
 

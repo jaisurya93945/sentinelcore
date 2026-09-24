@@ -11,4 +11,4 @@ three stay equal, so drift fails CI rather than shipping an API that
 advertises a version the package has not been for two milestones.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
