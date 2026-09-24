@@ -46,6 +46,7 @@ enforce_auth_required()
 app.middleware("http")(resource_protection_middleware)
 
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
+app.include_router(health.metrics_router, tags=["health"])  # conventional /metrics
 app.include_router(scan.router, prefix="/api/v1", tags=["scan"])
 app.include_router(tool_call.router, prefix="/api/v1", tags=["tool-call"])
 app.include_router(mcp.router, prefix="/api/v1", tags=["mcp"])

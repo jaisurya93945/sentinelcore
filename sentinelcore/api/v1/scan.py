@@ -21,6 +21,7 @@ after that attempt; `enforcement_status` explains how it got there.
 audit trail, regardless of what enforcement did afterward.
 """
 
+import time
 from fastapi import APIRouter, Depends
 
 from sentinelcore.core.auth import Role, require_role
@@ -30,12 +31,14 @@ from sentinelcore.services.audit_log import log_scan_event
 from sentinelcore.services.policy_engine import decide
 from sentinelcore.services.risk_engine import calculate_risk_score
 from sentinelcore.services.sanitizer import enforce_sanitize
+from sentinelcore.core.metrics import record_scan
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
 
 @router.post("/scan", response_model=ScanResult)
 def scan(payload: ScanRequest) -> ScanResult:
+    _t0 = time.perf_counter()
     result = ScanResult(input_text=payload.text)
     detectors = get_registered_detectors()
 
@@ -75,6 +78,10 @@ def scan(payload: ScanRequest) -> ScanResult:
             result.enforcement_status = sanitize_result.enforcement_status
             result.decision = sanitize_result.decision
 
+    record_scan("scan", result.decision.value,
+                duration_seconds=time.perf_counter() - _t0,
+                findings=result.findings,
+                enforcement_status=result.enforcement_status.value)
     log_scan_event(result.scan_id, "scan", result.risk_score, result.decision.value, result.findings)
 
     return result

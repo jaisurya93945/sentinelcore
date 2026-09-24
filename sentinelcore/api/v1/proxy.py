@@ -28,6 +28,7 @@ from sentinelcore.services.risk_engine import calculate_risk_score
 from sentinelcore.services.sanitizer import enforce_sanitize
 from sentinelcore.services.tool_policy import authorize_tool
 from sentinelcore.core.textextract import extract_scannable_text
+from sentinelcore.core.metrics import record_scan
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -417,6 +418,7 @@ async def _stream_and_scan(scan_id: str, raw_body: bytes, headers: dict):
             buffered_chars -= n
             yield f"data: {ds}\n\n"
 
+    record_scan("proxy_output_stream", last_decision.value, findings=last_findings, stage="output_stream")
     log_scan_event(scan_id, "proxy_output_stream", last_risk_score, last_decision.value, last_findings)
 
 
@@ -460,6 +462,8 @@ async def chat_completions(request: Request):
                 forward_body = _substitute_latest_user_message(dict(body), sanitize_result.sanitized_text)
 
     scan_id = str(uuid.uuid4())
+    record_scan("proxy_input", input_decision.value, findings=input_findings,
+                enforcement_status=enforcement_status.value, stage="input")
     log_scan_event(scan_id, "proxy_input", input_risk_score, input_decision.value, input_findings)
 
     if input_decision == Decision.BLOCK:
@@ -533,6 +537,8 @@ async def chat_completions(request: Request):
     # engine first reached rather than the one it acted on is exactly the
     # kind of record that is worse than none -- an incident review would
     # read "sanitize" for a request that was refused.
+    record_scan("proxy_output", output_decision.value, findings=output_findings,
+                enforcement_status=output_enforcement.value, stage="output")
     log_scan_event(
         scan_id,
         "proxy_output",

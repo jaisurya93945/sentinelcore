@@ -35,6 +35,7 @@ from sentinelcore.services.approvals import request_approval
 from sentinelcore.services.sanitizer import enforce_sanitize_arguments
 from sentinelcore.services.tool_policy import authorize_tool
 from sentinelcore.core.textextract import extract_scannable_text
+from sentinelcore.core.metrics import record_scan
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -99,5 +100,7 @@ def scan_tool_call(payload: ToolCallRequest) -> ToolCallResult:
         result.enforcement_status = (
             EnforcementStatus.PENDING_APPROVAL if result.approval_id else EnforcementStatus.NOT_IMPLEMENTED
         )
+    record_scan("tool_call", final_decision.value, findings=result.findings,
+                enforcement_status=result.enforcement_status.value)
     log_scan_event(result.scan_id, "tool_call", risk_score, final_decision.value, findings, detail=payload.tool_name)
     return result
