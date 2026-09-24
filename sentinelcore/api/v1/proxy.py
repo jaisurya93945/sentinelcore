@@ -26,6 +26,7 @@ from sentinelcore.services.proxy import forward_to_upstream, stream_lines_from_u
 from sentinelcore.services.risk_engine import calculate_risk_score
 from sentinelcore.services.sanitizer import enforce_sanitize
 from sentinelcore.services.tool_policy import authorize_tool
+from sentinelcore.core.textextract import extract_scannable_text
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -140,7 +141,10 @@ def _scan_tool_calls(tool_calls: list[dict]) -> tuple[list[Finding], Decision]:
         name = call["name"]
         decisions.append(authorize_tool(name))
 
-        arg_findings = _scan_text(str(call["arguments"]), origin=f"tool_arguments:{name}")
+        # NOT str(): repr escapes non-printables, so zero-width and bidi
+        # payloads were invisible here. See sentinelcore/core/textextract.py.
+        arg_findings = _scan_text(extract_scannable_text(call["arguments"]),
+                                  origin=f"tool_arguments:{name}")
         all_findings.extend(arg_findings)
         decisions.append(decide(arg_findings, calculate_risk_score(arg_findings)))
 

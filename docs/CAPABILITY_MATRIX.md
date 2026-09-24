@@ -18,7 +18,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Output scanning (PII/secrets in LLM responses) | `tests/unit/test_scan_endpoint.py`, proxy tests |
 | Reverse proxy, OpenAI-path-compatible, request + response scanning | `tests/unit/test_proxy.py` -- BLOCK-never-calls-upstream proven via mock assertion |
 | Streaming proxy, incremental scan, mid-stream cutoff | Live-verified: violating chunk fully suppressed |
-| Tool-call inspection: deterministic tool-name authorization + argument/response scanning | `tests/unit/test_tool_call_endpoint.py` -- 4-scenario live verification |
+| Tool-call inspection: deterministic tool-name authorization + argument/response scanning | `tests/unit/test_tool_call_endpoint.py` -- 4-scenario live verification. **Found and fixed a real detection bypass:** all three paths (API, `Guard` SDK, proxy) scanned a *serialized* form of the arguments, and both `json.dumps` and `str` escape non-ASCII back to ASCII, so zero-width, bidi and homoglyph payloads reached the detector already defanged. Identical text: risk 60 and BLOCK via `/scan`, **risk 0 and no findings** via `/scan/tool-call`. `tests/unit/test_tool_argument_extraction.py` -- 19 tests; 11 fail against the pre-fix code, and the proxy path fails on exactly the two non-printable families, matching the mechanism |
 | MCP tool discovery scanning, recursive description extraction | `tests/unit/test_mcp_endpoint.py` -- verified against real MCP spec via search |
 | Audit logging (metadata-only SQLite, never raw text/evidence) | `tests/unit/test_audit_log.py` |
 | Dashboard (`GET /dashboard`) | Screenshot-verified against live seeded data |
@@ -50,7 +50,7 @@ This exists because the honest answer to "is it done" needs more than yes/no. Ev
 | Dependency scanning (`pip-audit`, blocking CI gate) | Clean as of last check |
 | Authentication + role-based authorization (viewer/operator/admin) | `tests/unit/test_auth.py`, `test_auth_integration.py` -- all 6 scenarios live-verified |
 
-**Verified right now** — re-measured, not carried forward: **7 registered detectors**, **23 API operations** across 9 routers, **446 passing tests with 0 skipped** (13 of those require a live PostgreSQL server and now get one in CI), `sentinelcore/core/auth.py` at 100% coverage, **85% overall coverage**.
+**Verified right now** — re-measured, not carried forward: **7 registered detectors**, **23 API operations** across 9 routers, **465 passing tests with 0 skipped** (13 of those require a live PostgreSQL server and now get one in CI), `sentinelcore/core/auth.py` at 100% coverage, **85% overall coverage**.
 
 Those numbers had drifted badly: this line previously read 5 detectors, 8 endpoints, 154 tests and 98% coverage, none of which had been true for several milestones. **Coverage genuinely fell, 98% → 85%**, and that is not a measurement artefact — the codebase roughly tripled to 3,133 statements while newer subsystems shipped with thinner tests. The weakest is `storage/postgres_backend.py` at **59%**, which is now integration-tested but far from exercised. Stating it here rather than quoting the old number is the entire point of this document.
 

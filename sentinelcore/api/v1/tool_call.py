@@ -33,6 +33,7 @@ from sentinelcore.services.policy_engine import decide, most_severe
 from sentinelcore.services.risk_engine import calculate_risk_score
 from sentinelcore.services.approvals import request_approval
 from sentinelcore.services.tool_policy import authorize_tool
+from sentinelcore.core.textextract import extract_scannable_text
 
 router = APIRouter(dependencies=[Depends(require_role(Role.OPERATOR))])
 
@@ -49,7 +50,10 @@ def _scan_text(text: str, origin: str) -> list[Finding]:
 
 @router.post("/scan/tool-call", response_model=ToolCallResult)
 def scan_tool_call(payload: ToolCallRequest) -> ToolCallResult:
-    findings = _scan_text(json.dumps(payload.arguments), origin="tool_arguments")
+    # NOT json.dumps: it escapes non-ASCII back to ASCII, so zero-width,
+    # bidi and homoglyph payloads reached the detector already defanged and
+    # produced no findings. See sentinelcore/core/textextract.py.
+    findings = _scan_text(extract_scannable_text(payload.arguments), origin="tool_arguments")
     if payload.response:
         findings.extend(_scan_text(payload.response, origin="tool_response"))
 

@@ -117,12 +117,40 @@ Two independent checks: (1) deterministic tool-name authorization via `tool_poli
 
 ### HUMAN_APPROVAL
 
-Added specifically for tool authorization. **v0.1 only returns this decision; nothing implements collecting an actual approval.**
+Added specifically for tool authorization. Collection is now implemented: `services/approvals.py` creates a real, queryable record, expiry is fail-closed, and the dashboard exposes an Approvals tab. (This section previously said "v0.1 only returns this decision; nothing implements collecting an actual approval" long after that stopped being true.)
+
+### FIXED: obfuscated tool arguments were invisible to the detectors
+
+The most serious defect found in this subsystem, and it was found by asking what the *other* documented gap actually did rather than by any test.
+
+Three call sites handed a **serialized** form of the arguments to the detectors -- `json.dumps(...)` in the endpoint and in the `Guard` SDK, `str(...)` in the proxy. Both escape characters back into ASCII, and the escaped form contains none of the characters the obfuscation detector looks for:
+
+```
+json.dumps({"b": "Ignore\u200ball"})   ->   '{"b": "Ignore\\u200ball"}'
+                                                       ^^^^^^ six ASCII characters
+                                                              where U+200B had been
+```
+
+Measured on identical text, before the fix:
+
+| Path | Result |
+|---|---|
+| `POST /api/v1/scan` | `zero_width_characters`, risk 60, escalated to BLOCK |
+| `POST /api/v1/scan/tool-call` | **no findings at all**, risk 0, decision WARN |
+
+`json.dumps` escapes all non-ASCII, so zero-width, bidi **and** homoglyph attacks were invisible on the API and SDK paths. `str()` on a dict escapes only non-printables, so the proxy was blind to zero-width and bidi while still catching homoglyphs -- and the regression tests reproduce exactly that asymmetry against the old code, which is the evidence they measure the real mechanism.
+
+**Why this mattered more here than it would elsewhere.** Tool arguments carry this project's highest provenance multiplier, 1.8x against 1.0 for direct input, on the stated grounds that they are the most dangerous origin. The path weighted as most dangerous was the one that could not see obfuscation.
+
+**It also bounds an existing claim.** `docs/ADAPTIVE_EVAL.md` reports 0% evasion for the zero-width, homoglyph and character-spacing families. That harness calls the detectors directly, so it never touched this path -- the detector was robust and the plumbing in front of it was not. The adaptive results were never wrong, but they covered less than they appeared to.
+
+Fixed in `sentinelcore/core/textextract.py`, which walks the structure and yields the real strings. Not `ensure_ascii=False`: a serialized blob is the wrong input to a text detector regardless of escaping, and one-line fixes invite the same mistake at the next call site. Regression tests in `tests/unit/test_tool_argument_extraction.py`, including a parity test asserting that identical text yields identical finding *types* whether it arrives as direct input or as a tool argument -- an invariant that fails for any future serialization mistake in any detector, rather than only the three families someone thought to enumerate.
 
 ### Known limitations
 
 - The tool-argument detector runs on all text, not just tool arguments -- false-positive risk on ordinary technical chat.
 - No blanket policy.yaml rules for tool_arguments categories, deliberately -- severity gradient drives the threshold response instead.
+- **SANITIZE is still not enforced on this path.** `tool_call.py` acts on HUMAN_APPROVAL but has no SANITIZE branch, so a SANITIZE decision is returned with `enforcement_status` unset and no sanitized text. Callers must treat SANITIZE here as refusal, not as permission to proceed. Same for `POST /api/v1/scan/mcp-tools`.
 - No intent alignment (comparing what the user asked for against what the agent is about to do) -- needs semantic understanding, not regex.
 - No tool chaining, step limits, or session tracking.
 

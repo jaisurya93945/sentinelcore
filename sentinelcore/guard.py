@@ -32,6 +32,7 @@ from sentinelcore.services.policy_engine import decide, load_policy, most_severe
 from sentinelcore.services.risk_engine import calculate_risk_score
 from sentinelcore.services.sanitizer import enforce_sanitize
 from sentinelcore.services.tool_policy import authorize_tool
+from sentinelcore.core.textextract import extract_scannable_text
 
 __all__ = ["Guard", "ScanOutcome", "Decision", "EnforcementStatus", "Blocked"]
 
@@ -187,7 +188,9 @@ class Guard:
         findings: list[Finding] = []
         with self._active():
             for cls in get_registered_detectors().values():
-                found = cls().detect(json.dumps(arguments))
+                # NOT json.dumps -- see sentinelcore/core/textextract.py; the
+                # escaped form hides every Unicode obfuscation family.
+                found = cls().detect(extract_scannable_text(arguments))
                 for f in found:
                     f.origin = f"tool_arguments:{name}"
                 findings.extend(found)
